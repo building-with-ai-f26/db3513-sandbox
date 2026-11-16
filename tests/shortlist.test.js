@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Anthropic = require('@anthropic-ai/sdk');
-const { buildShortlist, MOODS } = require('../server/shortlist');
+const { buildShortlist, MOODS, QUIZ_PICKS } = require('../server/shortlist');
 
 // Made-up films and a pretend Claude, so these tests never touch the network or cost money.
 function film(id, sources = [{ type: 'watchlist', person: 'Sam' }]) {
@@ -239,24 +239,32 @@ test('a rate limit asks the user to try again', async () => {
   await assert.rejects(shortlist(fakeClaude(error)), /Try again in a minute/);
 });
 
-const TEN_PICKS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(pick);
+const QUIZ_RANKED = Array.from({ length: QUIZ_PICKS }, (_, index) => pick(QUIZ_PICKS - index));
 const QUIZ_VIEWER = {
   name: 'Sam',
   interests: { into: ['Comedy'], skip: ['Horror'], lovedLately: ['Alpha'], era: 'Any era' },
 };
 
-test('asks for up to ten picks when given a larger limit', async () => {
-  const claude = fakeClaude(reply(TEN_PICKS));
-  const picks = await shortlist(claude, { maxPicks: 10 });
+test('asks for the quiz number of picks when given a larger limit', async () => {
+  const claude = fakeClaude(reply(QUIZ_RANKED));
+  const picks = await shortlist(claude, { maxPicks: QUIZ_PICKS });
 
-  assert.equal(picks.length, 10);
-  assert.deepEqual(claude.requests[0].output_config.format.schema.required, slotNames(10));
+  assert.equal(picks.length, QUIZ_PICKS);
+  assert.deepEqual(claude.requests[0].output_config.format.schema.required, slotNames(QUIZ_PICKS));
+});
+
+test('never asks for more picks than there are slots', async () => {
+  const claude = fakeClaude(reply(QUIZ_RANKED));
+  await shortlist(claude, { maxPicks: 50 });
+
+  assert.equal(claude.requests[0].output_config.format.schema.required.length, QUIZ_PICKS);
 });
 
 test('with a larger limit, still accepts five valid picks', async () => {
-  const claude = fakeClaude(reply([...TEN_PICKS.slice(0, 5), MADE_UP, MADE_UP, MADE_UP, MADE_UP, MADE_UP]));
+  const invalid = Array(QUIZ_PICKS - 5).fill(MADE_UP);
+  const claude = fakeClaude(reply([...QUIZ_RANKED.slice(0, 5), ...invalid]));
 
-  assert.equal((await shortlist(claude, { maxPicks: 10 })).length, 5);
+  assert.equal((await shortlist(claude, { maxPicks: QUIZ_PICKS })).length, 5);
   assert.equal(claude.requests.length, 1);
 });
 
@@ -278,4 +286,28 @@ test('Letterboxd viewers keep the rating-based prompt', async () => {
 
   assert.match(claude.requests[0].system, /rated highly/);
   assert.doesNotMatch(claude.requests[0].system, /said they are into/);
+});
+
+test('uses high effort by default and the given effort when set', async () => {
+  const standard = fakeClaude(reply(SIX_PICKS));
+  await shortlist(standard);
+  assert.equal(standard.requests[0].output_config.effort, 'high');
+
+  const quiz = fakeClaude(reply(SIX_PICKS));
+  await shortlist(quiz, { effort: 'xhigh' });
+  assert.equal(quiz.requests[0].output_config.effort, 'xhigh');
+});
+
+test('quiz answers start with a plan, and Letterboxd answers have none', async () => {
+  const quiz = fakeClaude(reply(SIX_PICKS));
+  await shortlist(quiz, { people: [QUIZ_VIEWER] });
+  const quizSchema = quiz.requests[0].output_config.format.schema;
+  assert.deepEqual(quizSchema.required, ['plan', ...slotNames(6)]);
+  assert.equal(Object.keys(quizSchema.properties)[0], 'plan');
+  assert.match(quiz.requests[0].system, /First write "plan"/);
+
+  const letterboxd = fakeClaude(reply(SIX_PICKS));
+  await shortlist(letterboxd);
+  assert.deepEqual(letterboxd.requests[0].output_config.format.schema.required, slotNames(6));
+  assert.doesNotMatch(letterboxd.requests[0].system, /plan/);
 });

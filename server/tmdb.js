@@ -37,8 +37,9 @@ function trimProviders(watchProviders) {
   );
 }
 
+// A service listed as both free and with ads is shown once.
 function providerNames(providers = []) {
-  return providers.map((provider) => (provider.provider_name ?? '').trim()).filter(Boolean);
+  return [...new Set(providers.map((provider) => (provider.provider_name ?? '').trim()))].filter(Boolean);
 }
 
 // Every way to watch, by name, for people who don't pay for a streaming service.

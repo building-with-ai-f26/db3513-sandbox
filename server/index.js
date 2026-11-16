@@ -9,7 +9,7 @@ const { loadProfiles, saveProfiles, deleteExpiredSessions } = require('./store')
 const { withSession, SESSION_LIFETIME_MS } = require('./sessions');
 const { createTmdbClient } = require('./tmdb');
 const { buildCandidates, SERVICES, REGIONS } = require('./candidates');
-const { buildShortlist, MOODS, QUIZ_PICKS } = require('./shortlist');
+const { buildShortlist, MOODS, QUIZ_PICKS, QUIZ_EFFORT } = require('./shortlist');
 const { readAnswers, describeViewer, buildQuizCandidates, GENRES, ERAS } = require('./quiz');
 
 const PORT = process.env.PORT || 3000;
@@ -309,6 +309,7 @@ app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.jso
       people: answers.people.map(describeViewer),
       mood: answers.mood,
       maxPicks: QUIZ_PICKS,
+      effort: QUIZ_EFFORT,
       model: process.env.ANTHROPIC_MODEL,
       claude: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
     });

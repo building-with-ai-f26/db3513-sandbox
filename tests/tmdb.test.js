@@ -181,3 +181,25 @@ test('discovers films in any chosen genre, without avoided ones, within the year
   assert.equal(params.get('page'), '2');
   assert.equal(films[0].title, 'Alpha');
 });
+
+test('lists a service once when it is both free and ad-supported', async (t) => {
+  stubFetch(t, [{
+    body: {
+      ...movie('Alpha', '2001-05-01'),
+      status: 'Released',
+      genres: [],
+      'watch/providers': {
+        results: {
+          US: {
+            free: [{ provider_id: 83, provider_name: 'The CW' }],
+            ads: [{ provider_id: 83, provider_name: 'The CW ' }, { provider_id: 73, provider_name: 'Tubi' }],
+          },
+        },
+      },
+    },
+  }]);
+
+  const details = await createTmdbClient('token', {}).getDetails(1);
+
+  assert.deepEqual(details.watchOptionsByRegion.US.free, ['The CW', 'Tubi']);
+});
