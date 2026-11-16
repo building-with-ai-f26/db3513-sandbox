@@ -111,3 +111,73 @@ test('keeps only subscription streaming, not rent or buy', async (t) => {
 
   assert.deepEqual(details.providersByRegion, { US: [8] });
 });
+
+test('lists every way to watch by name, with free and ad-supported together', async (t) => {
+  stubFetch(t, [{
+    body: {
+      ...movie('Alpha', '2001-05-01'),
+      status: 'Released',
+      runtime: 100,
+      genres: [{ name: 'Drama' }],
+      'watch/providers': {
+        results: {
+          US: {
+            flatrate: [{ provider_id: 8, provider_name: 'Netflix' }],
+            free: [{ provider_id: 1, provider_name: 'Kanopy' }],
+            ads: [{ provider_id: 73, provider_name: 'Tubi' }],
+            rent: [{ provider_id: 2, provider_name: 'Apple TV' }],
+          },
+        },
+      },
+    },
+  }]);
+
+  const details = await createTmdbClient('token', {}).getDetails(1);
+
+  assert.deepEqual(details.watchOptionsByRegion, {
+    US: { subscription: ['Netflix'], free: ['Kanopy', 'Tubi'], rent: ['Apple TV'], buy: [] },
+  });
+  assert.deepEqual(details.providersByRegion, { US: [8] });
+});
+
+test('finds a typed title without a year, preferring an exact match', async (t) => {
+  const requests = stubFetch(t, [{
+    body: { results: [movie('Alpha Returns', '2005-01-01'), { ...movie('Alpha', '2001-05-01'), id: 2 }] },
+  }]);
+
+  const match = await createTmdbClient('token', {}).findMovie('alpha');
+
+  assert.equal(match.id, 2);
+  assert.ok(!new URL(requests[0].url).searchParams.has('primary_release_year'));
+});
+
+test('falls back to the top result when no title matches exactly', async (t) => {
+  stubFetch(t, [{ body: { results: [movie('Alpha Returns', '2005-01-01')] } }]);
+
+  assert.equal((await createTmdbClient('token', {}).findMovie('Alpha 2')).title, 'Alpha Returns');
+});
+
+test('finds nothing when the search is empty', async (t) => {
+  stubFetch(t, [{ body: { results: [] } }]);
+
+  assert.equal(await createTmdbClient('token', {}).findMovie('Nothing'), null);
+});
+
+test('discovers films in any chosen genre, without avoided ones, within the years', async (t) => {
+  const requests = stubFetch(t, [{ body: { results: [movie('Alpha', '2001-05-01')] } }]);
+
+  const films = await createTmdbClient('token', {}).discoverMovies({
+    genreIds: [35, 18],
+    avoidGenreIds: [27],
+    fromYear: 2000,
+    page: 2,
+  });
+
+  const params = new URL(requests[0].url).searchParams;
+  assert.equal(params.get('with_genres'), '35|18');
+  assert.equal(params.get('without_genres'), '27');
+  assert.equal(params.get('primary_release_date.gte'), '2000-01-01');
+  assert.ok(!params.has('primary_release_date.lte'));
+  assert.equal(params.get('page'), '2');
+  assert.equal(films[0].title, 'Alpha');
+});

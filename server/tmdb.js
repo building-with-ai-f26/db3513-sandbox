@@ -37,6 +37,25 @@ function trimProviders(watchProviders) {
   );
 }
 
+function providerNames(providers = []) {
+  return providers.map((provider) => (provider.provider_name ?? '').trim()).filter(Boolean);
+}
+
+// Every way to watch, by name, for people who don't pay for a streaming service.
+function trimWatchOptions(watchProviders) {
+  return Object.fromEntries(
+    Object.entries(watchProviders?.results ?? {}).map(([region, options]) => [
+      region,
+      {
+        subscription: providerNames(options.flatrate),
+        free: providerNames([...(options.free ?? []), ...(options.ads ?? [])]),
+        rent: providerNames(options.rent),
+        buy: providerNames(options.buy),
+      },
+    ]),
+  );
+}
+
 function createTmdbClient(token, cache = loadTmdbCache()) {
   async function request(endpoint, params = {}) {
     const url = new URL(`${BASE_URL}${endpoint}`);
@@ -95,6 +114,39 @@ function createTmdbClient(token, cache = loadTmdbCache()) {
     });
   }
 
+  // Finds a typed title without a year, preferring an exact title match over the top result.
+  function findMovie(name) {
+    return cached(`find:${name}`, async () => {
+      const { results } = await request('/search/movie', { query: name, include_adult: 'false' });
+      const wanted = comparableTitle(name);
+      const match = results.find(
+        (movie) =>
+          comparableTitle(movie.title) === wanted || comparableTitle(movie.original_title) === wanted,
+      );
+      const found = match ?? results[0];
+      return found ? trimRecommendation(found) : null;
+    });
+  }
+
+  // Well-reviewed films in any of the given genres, skipping the avoided ones.
+  function discoverMovies({ genreIds, avoidGenreIds = [], fromYear, toYear, page = 1 }) {
+    const params = {
+      with_genres: genreIds.join('|'),
+      without_genres: avoidGenreIds.join(','),
+      sort_by: 'vote_average.desc',
+      'vote_count.gte': '300',
+      include_adult: 'false',
+      page: String(page),
+    };
+    if (fromYear) params['primary_release_date.gte'] = `${fromYear}-01-01`;
+    if (toYear) params['primary_release_date.lte'] = `${toYear}-12-31`;
+
+    return cached(`discover:${new URLSearchParams(params)}`, async () => {
+      const { results } = await request('/discover/movie', params);
+      return results.map(trimRecommendation);
+    });
+  }
+
   function getRecommendations(id) {
     return cached(`recommendations:${id}`, async () => {
       const { results } = await request(`/movie/${id}/recommendations`);
@@ -113,12 +165,15 @@ function createTmdbClient(token, cache = loadTmdbCache()) {
         overview: movie.overview,
         genres: movie.genres.map((genre) => genre.name),
         providersByRegion: trimProviders(movie['watch/providers']),
+        watchOptionsByRegion: trimWatchOptions(movie['watch/providers']),
       };
     });
   }
 
   return {
     searchMovie,
+    findMovie,
+    discoverMovies,
     getRecommendations,
     getDetails,
     saveCache: () => saveTmdbCache(cache),

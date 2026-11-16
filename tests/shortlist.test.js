@@ -238,3 +238,44 @@ test('a rate limit asks the user to try again', async () => {
 
   await assert.rejects(shortlist(fakeClaude(error)), /Try again in a minute/);
 });
+
+const TEN_PICKS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(pick);
+const QUIZ_VIEWER = {
+  name: 'Sam',
+  interests: { into: ['Comedy'], skip: ['Horror'], lovedLately: ['Alpha'], era: 'Any era' },
+};
+
+test('asks for up to ten picks when given a larger limit', async () => {
+  const claude = fakeClaude(reply(TEN_PICKS));
+  const picks = await shortlist(claude, { maxPicks: 10 });
+
+  assert.equal(picks.length, 10);
+  assert.deepEqual(claude.requests[0].output_config.format.schema.required, slotNames(10));
+});
+
+test('with a larger limit, still accepts five valid picks', async () => {
+  const claude = fakeClaude(reply([...TEN_PICKS.slice(0, 5), MADE_UP, MADE_UP, MADE_UP, MADE_UP, MADE_UP]));
+
+  assert.equal((await shortlist(claude, { maxPicks: 10 })).length, 5);
+  assert.equal(claude.requests.length, 1);
+});
+
+test('quiz viewers are described by their interests and reasons tie to them', async () => {
+  const claude = fakeClaude(reply(SIX_PICKS));
+  await shortlist(claude, { people: [QUIZ_VIEWER] });
+
+  const [request] = claude.requests;
+  const { content } = request.messages[0];
+  const sent = JSON.parse(content.slice(content.indexOf('{')));
+  assert.deepEqual(sent.viewers, [QUIZ_VIEWER]);
+  assert.match(request.system, /said they are into right now/);
+  assert.doesNotMatch(request.system, /rated highly|"recommended"/);
+});
+
+test('Letterboxd viewers keep the rating-based prompt', async () => {
+  const claude = fakeClaude(reply(SIX_PICKS));
+  await shortlist(claude);
+
+  assert.match(claude.requests[0].system, /rated highly/);
+  assert.doesNotMatch(claude.requests[0].system, /said they are into/);
+});
