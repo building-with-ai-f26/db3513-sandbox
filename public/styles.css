@@ -509,6 +509,21 @@ button.secondary {
 
 .region-field { max-width: 160px; }
 
+.era-field {
+  max-width: 260px;
+  margin-bottom: 0;
+}
+
+.favorites input:first-child { margin-top: 0; }
+
+.watch-options {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 14px;
+}
+
 .picks {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
