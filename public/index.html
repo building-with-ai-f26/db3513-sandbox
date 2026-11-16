@@ -9,7 +9,7 @@
 <body>
   <main class="container" id="container">
     <h1>The Shortlist</h1>
-    <p class="tagline">Movies picked for you, on the services you already pay for.</p>
+    <p class="tagline">Movies picked for you, wherever you can watch them.</p>
 
     <nav aria-label="Progress">
       <ol class="steps">
@@ -21,14 +21,29 @@
 
     <section data-step="you" hidden>
       <h2 class="step-heading" tabindex="-1">Who's watching?</h2>
+      <fieldset class="choices">
+        <legend>How should we get to know you?</legend>
+        <div class="moods" id="mode-options">
+          <label class="mood">
+            <input type="radio" name="mode" value="letterboxd" checked />
+            <span><strong>Use my Letterboxd</strong><small>Your ratings and watchlist, matched to the services you pay for</small></span>
+          </label>
+          <label class="mood">
+            <input type="radio" name="mode" value="quiz" />
+            <span><strong>Answer a few questions</strong><small>No account, uploads or subscription needed</small></span>
+          </label>
+        </div>
+      </fieldset>
       <div id="people"></div>
+      <div id="quiz-people" hidden></div>
+      <p class="hint" id="quiz-hint" hidden>Add a name and at least one genre for everyone to continue.</p>
       <button type="button" class="primary-action" id="to-tonight" disabled>Next: choose tonight's mood</button>
     </section>
 
     <section data-step="tonight" hidden>
-      <h2 class="step-heading" tabindex="-1">Streaming platforms</h2>
+      <h2 class="step-heading" id="tonight-heading" tabindex="-1">Streaming platforms</h2>
       <form id="finder-form">
-        <fieldset class="choices">
+        <fieldset class="choices" id="services-field">
           <legend id="services-legend">Your services</legend>
           <div class="chips" id="service-options"></div>
         </fieldset>
@@ -162,6 +177,41 @@
     </section>
   </template>
 
+  <template id="quiz-template">
+    <section class="person">
+      <div class="person-header">
+        <h3 class="card-heading" data-field="heading"></h3>
+        <button type="button" class="quiet" data-field="remove" hidden>Remove</button>
+      </div>
+      <form>
+        <label>
+          Name
+          <input type="text" name="name" maxlength="40" autocomplete="off" required />
+        </label>
+        <fieldset class="choices">
+          <legend>What are you into right now?</legend>
+          <div class="chips" data-field="genres"></div>
+        </fieldset>
+        <fieldset class="choices">
+          <legend>Anything to skip? (optional)</legend>
+          <div class="chips" data-field="avoid"></div>
+        </fieldset>
+        <fieldset class="choices">
+          <legend>Films you've loved lately (optional)</legend>
+          <div class="favorites">
+            <input type="text" name="favorites" maxlength="100" autocomplete="off" aria-label="Film 1" />
+            <input type="text" name="favorites" maxlength="100" autocomplete="off" aria-label="Film 2" />
+            <input type="text" name="favorites" maxlength="100" autocomplete="off" aria-label="Film 3" />
+          </div>
+        </fieldset>
+        <label class="era-field">
+          Era
+          <select name="era" data-field="era"></select>
+        </label>
+      </form>
+    </section>
+  </template>
+
   <template id="pick-template">
     <li class="pick">
       <img class="pick-poster" data-field="poster" alt="" hidden />
@@ -174,6 +224,7 @@
           <summary>More about this film</summary>
           <p class="film-note" data-field="genres"></p>
           <p class="more" data-field="overview"></p>
+          <ul class="watch-options" data-field="watch" hidden></ul>
         </details>
         <button type="button" class="quiet veto" data-field="veto">Not tonight</button>
       </div>

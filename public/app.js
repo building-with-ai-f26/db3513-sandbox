@@ -1,6 +1,10 @@
 const SLOT_HEADINGS = ['You', 'Second person'];
 const POSTER_BASE_URL = 'https://image.tmdb.org/t/p/w342';
 const CHOICES_STORAGE_KEY = 'shortlist-choices';
+const MODE_STORAGE_KEY = 'shortlist-mode';
+const QUIZ_STORAGE_KEY = 'shortlist-quiz';
+const MAX_QUIZ_PEOPLE = 2;
+const MAX_SERVICES_SHOWN = 2;
 const UNDO_WINDOW_MS = 6000;
 const LOADING_MESSAGE_MS = 3000;
 const LOADING_MESSAGES = [
@@ -8,6 +12,19 @@ const LOADING_MESSAGES = [
   "Leaving out what you've already seen…",
   'Asking Claude for the best fits…',
   'Writing why each one suits you…',
+];
+const QUIZ_LOADING_MESSAGES = [
+  'Finding films that match your answers…',
+  'Checking where you can watch them…',
+  'Asking Claude for the best fits…',
+  'Writing why each one suits you…',
+];
+// Free comes first, since quiz mode is for people who may not pay for streaming.
+const WATCH_OPTION_LABELS = [
+  ['free', 'Free on'],
+  ['subscription', 'Streaming on'],
+  ['rent', 'Rent on'],
+  ['buy', 'Buy on'],
 ];
 const MOOD_NOTES = {
   light: 'Comfort, comedy, nothing heavy',
@@ -17,6 +34,11 @@ const MOOD_NOTES = {
 
 const container = document.getElementById('container');
 const people = document.getElementById('people');
+const quizPeople = document.getElementById('quiz-people');
+const quizHint = document.getElementById('quiz-hint');
+const modeOptions = document.getElementById('mode-options');
+const tonightHeading = document.getElementById('tonight-heading');
+const servicesField = document.getElementById('services-field');
 const toTonight = document.getElementById('to-tonight');
 const finderForm = document.getElementById('finder-form');
 const finderButton = document.getElementById('finder-button');
@@ -45,6 +67,10 @@ let lastChoices = null;
 let hasShortlist = false;
 let toastTimer = null;
 let loadingTimer = null;
+let mode = 'letterboxd';
+let quizAnswers = [];
+let genres = [];
+let eras = [];
 
 function cloneTemplate(id) {
   return document.getElementById(id).content.firstElementChild.cloneNode(true);
@@ -97,9 +123,25 @@ function showToast(text, action) {
   toastTimer = setTimeout(hideToast, UNDO_WINDOW_MS);
 }
 
+function readStored(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key));
+  } catch (error) {
+    return null;
+  }
+}
+
+function writeStored(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (error) {
+    // Remembering answers is only a convenience, so the app works without it.
+  }
+}
+
 // Steps
 function canVisit(step) {
-  if (step === 'tonight') return filledCount() > 0;
+  if (step === 'tonight') return mode === 'quiz' ? isQuizReady() : filledCount() > 0;
   if (step === 'shortlist') return hasShortlist;
   return true;
 }
@@ -347,7 +389,7 @@ function renderSlot(slot) {
 
 function renderPeople() {
   people.replaceChildren(...renderSlot(0), ...renderSlot(1));
-  toTonight.disabled = filledCount() === 0;
+  toTonight.disabled = !canVisit('tonight');
   servicesLegend.textContent = filledCount() === 2 ? 'Services you share' : 'Your services';
   updateSteps(currentStep());
 }
@@ -363,25 +405,18 @@ function readChoices() {
 }
 
 function loadSavedChoices() {
-  try {
-    return JSON.parse(localStorage.getItem(CHOICES_STORAGE_KEY)) ?? {};
-  } catch (error) {
-    return {};
-  }
+  return readStored(CHOICES_STORAGE_KEY) ?? {};
 }
 
 function saveChoices(choices) {
-  try {
-    localStorage.setItem(CHOICES_STORAGE_KEY, JSON.stringify(choices));
-  } catch (error) {
-    // Remembering choices is only a convenience, so the app works without it.
-  }
+  writeStored(CHOICES_STORAGE_KEY, choices);
 }
 
+// Quiz mode has no services to pick, since films can be free, rented or bought.
 function updateFinder() {
-  const hasService = readChoices().services.length > 0;
-  finderButton.disabled = !hasService;
-  finderHint.hidden = hasService;
+  const ready = mode === 'quiz' || readChoices().services.length > 0;
+  finderButton.disabled = !ready;
+  finderHint.hidden = ready;
 }
 
 function renderChoice(type, name, value, checked, ...content) {
@@ -409,6 +444,8 @@ function renderMood(mood, checked) {
 
 async function setUpFinder() {
   const options = await api('/api/options');
+  genres = options.genres;
+  eras = options.eras;
   const saved = loadSavedChoices();
   const savedMood = options.moods.some(({ id }) => id === saved.mood) ? saved.mood : 'either';
 
@@ -431,18 +468,140 @@ async function setUpFinder() {
   });
 }
 
+// Quiz
+function blankQuizPerson() {
+  return { name: '', genres: [], avoid: [], favorites: [], era: 'any' };
+}
+
+function isQuizReady() {
+  return quizAnswers.every((person) => person.name.trim() && person.genres.length > 0);
+}
+
+function readQuizForm(form) {
+  const formData = new FormData(form);
+  return {
+    name: formData.get('name'),
+    genres: formData.getAll('genres').map(Number),
+    avoid: formData.getAll('avoid').map(Number),
+    favorites: formData.getAll('favorites'),
+    era: formData.get('era'),
+  };
+}
+
+function updateQuizReady() {
+  quizHint.hidden = isQuizReady();
+  toTonight.disabled = !canVisit('tonight');
+  updateSteps(currentStep());
+}
+
+function renderGenreChips(name, chosen) {
+  return genres.map((genre) => {
+    const label = renderChoice('checkbox', name, genre.id, chosen.includes(genre.id), genre.name);
+    label.className = 'chip';
+    return label;
+  });
+}
+
+function renderQuizPerson(answers, index) {
+  const section = cloneTemplate('quiz-template');
+  const form = section.querySelector('form');
+  field(section, 'heading').textContent = SLOT_HEADINGS[index];
+  form.elements.name.value = answers.name;
+  field(section, 'genres').append(...renderGenreChips('genres', answers.genres));
+  field(section, 'avoid').append(...renderGenreChips('avoid', answers.avoid));
+  form.querySelectorAll('[name="favorites"]').forEach((input, slot) => {
+    input.value = answers.favorites[slot] ?? '';
+  });
+  field(section, 'era').append(...eras.map((era) => new Option(era.name, era.id)));
+  field(section, 'era').value = answers.era;
+
+  // A genre can't be both wanted and skipped, so choosing it in one list clears the other.
+  form.addEventListener('input', (event) => {
+    const other = { genres: 'avoid', avoid: 'genres' }[event.target.name];
+    if (other && event.target.checked) {
+      form.querySelector(`[name="${other}"][value="${event.target.value}"]`).checked = false;
+    }
+    quizAnswers[index] = readQuizForm(form);
+    writeStored(QUIZ_STORAGE_KEY, quizAnswers);
+    updateQuizReady();
+  });
+
+  if (index > 0) {
+    field(section, 'remove').hidden = false;
+    field(section, 'remove').addEventListener('click', () => {
+      quizAnswers.splice(index, 1);
+      writeStored(QUIZ_STORAGE_KEY, quizAnswers);
+      renderQuizPeople();
+    });
+  }
+  return section;
+}
+
+function renderQuizInvite() {
+  const section = cloneTemplate('invite-template');
+  field(section, 'add').addEventListener('click', () => {
+    quizAnswers.push(blankQuizPerson());
+    writeStored(QUIZ_STORAGE_KEY, quizAnswers);
+    renderQuizPeople();
+  });
+  return section;
+}
+
+function renderQuizPeople() {
+  const cards = quizAnswers.map(renderQuizPerson);
+  if (quizAnswers.length < MAX_QUIZ_PEOPLE) cards.push(renderQuizInvite());
+  quizPeople.replaceChildren(...cards);
+  updateQuizReady();
+}
+
+function loadSavedQuiz() {
+  const saved = readStored(QUIZ_STORAGE_KEY);
+  const valid = Array.isArray(saved) && saved.length > 0 && saved.length <= MAX_QUIZ_PEOPLE;
+  return valid ? saved.map((person) => ({ ...blankQuizPerson(), ...person })) : [blankQuizPerson()];
+}
+
+function quizRequest(choices) {
+  return {
+    people: quizAnswers.map((person) => ({
+      ...person,
+      name: person.name.trim(),
+      favorites: person.favorites.map((title) => title.trim()).filter(Boolean),
+    })),
+    mood: choices.mood,
+    region: choices.region,
+  };
+}
+
+function setMode(nextMode) {
+  mode = nextMode;
+  writeStored(MODE_STORAGE_KEY, mode);
+  const isQuiz = mode === 'quiz';
+  modeOptions.querySelector(`[value="${mode}"]`).checked = true;
+  people.hidden = isQuiz;
+  quizPeople.hidden = !isQuiz;
+  servicesField.hidden = isQuiz;
+  tonightHeading.textContent = isQuiz ? "Tonight's mood" : 'Streaming platforms';
+  if (isQuiz) {
+    renderQuizPeople();
+  } else {
+    quizHint.hidden = true;
+    renderPeople();
+  }
+  updateFinder();
+}
+
 // Shortlist
 function showPanel(panel) {
   for (const candidate of [loading, failure, results]) candidate.hidden = candidate !== panel;
   focusHeading(panel);
 }
 
-function startLoadingMessages() {
+function startLoadingMessages(messages) {
   let index = 0;
-  loadingStatus.textContent = LOADING_MESSAGES[0];
+  loadingStatus.textContent = messages[0];
   loadingTimer = setInterval(() => {
-    index = Math.min(index + 1, LOADING_MESSAGES.length - 1);
-    loadingStatus.textContent = LOADING_MESSAGES[index];
+    index = Math.min(index + 1, messages.length - 1);
+    loadingStatus.textContent = messages[index];
   }, LOADING_MESSAGE_MS);
 }
 
@@ -463,13 +622,39 @@ function updatePicksHeading() {
   else resultsHeading.textContent = "Today's Shortlist";
 }
 
+function listServices(names) {
+  const shown = names.slice(0, MAX_SERVICES_SHOWN).join(', ');
+  const hiddenCount = names.length - MAX_SERVICES_SHOWN;
+  return hiddenCount > 0 ? `${shown} and ${hiddenCount} more` : shown;
+}
+
+// Quiz picks can be watched in many ways, so the card shows the best one first.
+function whereToWatch(pick) {
+  if (pick.services) return `On ${pick.services.join(', ')}`;
+  const [key, label] = WATCH_OPTION_LABELS.find(([key]) => pick.watchOptions?.[key].length > 0) ?? [];
+  return key ? `${label} ${listServices(pick.watchOptions[key])}` : null;
+}
+
+function renderWatchOptions(item, watchOptions) {
+  const lines = WATCH_OPTION_LABELS
+    .filter(([key]) => watchOptions?.[key].length > 0)
+    .map(([key, label]) => {
+      const line = document.createElement('li');
+      line.textContent = `${label} ${watchOptions[key].join(', ')}`;
+      return line;
+    });
+  field(item, 'watch').append(...lines);
+  field(item, 'watch').hidden = lines.length === 0;
+}
+
 function renderPick(pick) {
   const item = cloneTemplate('pick-template');
   field(item, 'title').textContent = `${pick.title} (${pick.year})`;
   field(item, 'why').textContent = pick.why;
-  field(item, 'facts').textContent = [`On ${pick.services.join(', ')}`, pick.runtime && `${pick.runtime} min`]
+  field(item, 'facts').textContent = [whereToWatch(pick), pick.runtime && `${pick.runtime} min`]
     .filter(Boolean)
     .join(' · ');
+  if (!pick.services) renderWatchOptions(item, pick.watchOptions);
   field(item, 'genres').textContent = pick.genres.join(', ');
   field(item, 'overview').textContent = pick.overview;
 
@@ -491,11 +676,20 @@ function renderPick(pick) {
   return item;
 }
 
-function showResults({ picks, candidateCount, stats }) {
+function summarizeResults({ picks, candidateCount, stats }) {
+  if (mode === 'quiz') {
+    return picks.length > 0
+      ? `Chosen from ${candidateCount} films that match your answers.`
+      : `Checked ${stats.checked} films and none matched. Try more genres or a wider era.`;
+  }
   const watched = stats.watchedOnLetterboxd + stats.watchedOnNetflix;
-  resultsSummary.textContent = picks.length > 0
+  return picks.length > 0
     ? `Chosen from ${candidateCount} films on your services. Skipped ${watched} you've already watched.`
     : `Checked ${stats.checked} films and none are on your services. Try adding another service.`;
+}
+
+function showResults({ picks, candidateCount, stats }) {
+  resultsSummary.textContent = summarizeResults({ picks, candidateCount, stats });
   resultsList.replaceChildren(...picks.map(renderPick));
   updatePicksHeading();
   if (picks.length === 0) resultsHeading.textContent = 'Nothing to pick from tonight';
@@ -507,14 +701,15 @@ async function buildShortlist(choices) {
   hasShortlist = true;
   showStep('shortlist');
   showPanel(loading);
-  startLoadingMessages();
+  const isQuiz = mode === 'quiz';
+  startLoadingMessages(isQuiz ? QUIZ_LOADING_MESSAGES : LOADING_MESSAGES);
 
   try {
     await finishRemoval();
-    showResults(await api('/api/shortlist', {
+    showResults(await api(isQuiz ? '/api/quiz-shortlist' : '/api/shortlist', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(choices),
+      body: JSON.stringify(isQuiz ? quizRequest(choices) : choices),
     }));
   } catch (error) {
     failureMessage.textContent = error.message;
@@ -532,6 +727,7 @@ function setUpNavigation() {
     button.addEventListener('click', () => goToStep(button.dataset.goTo));
   }
   toTonight.addEventListener('click', () => goToStep('tonight'));
+  modeOptions.addEventListener('change', (event) => setMode(event.target.value));
   document.getElementById('try-again').addEventListener('click', () => buildShortlist(lastChoices));
   restorePicks.addEventListener('click', () => {
     for (const item of resultsList.children) item.hidden = false;
@@ -555,9 +751,12 @@ async function start() {
     showToast(error.message);
     return;
   }
+  quizAnswers = loadSavedQuiz();
+  const savedMode = readStored(MODE_STORAGE_KEY) === 'quiz' ? 'quiz' : 'letterboxd';
   // Someone returning with a profile is ready to choose tonight's film.
-  showStep(filledCount() > 0 ? 'tonight' : 'you');
-  renderPeople();
+  // Quiz answers are about what people are into right now, so they're shown again first.
+  showStep(savedMode === 'letterboxd' && filledCount() > 0 ? 'tonight' : 'you');
+  setMode(savedMode);
 }
 
 start();
