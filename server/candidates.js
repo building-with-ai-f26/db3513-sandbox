@@ -164,4 +164,11 @@ async function buildCandidates({ profiles, serviceIds, region, tmdb }) {
   };
 }
 
-module.exports = { buildCandidates, SERVICES, REGIONS, MAX_CANDIDATES_CHECKED, TOP_RATED_PER_PERSON };
+module.exports = {
+  buildCandidates,
+  mapWithLimit,
+  SERVICES,
+  REGIONS,
+  MAX_CANDIDATES_CHECKED,
+  TOP_RATED_PER_PERSON,
+};

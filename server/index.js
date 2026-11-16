@@ -9,7 +9,8 @@ const { loadProfiles, saveProfiles, deleteExpiredSessions } = require('./store')
 const { withSession, SESSION_LIFETIME_MS } = require('./sessions');
 const { createTmdbClient } = require('./tmdb');
 const { buildCandidates, SERVICES, REGIONS } = require('./candidates');
-const { buildShortlist, MOODS } = require('./shortlist');
+const { buildShortlist, MOODS, QUIZ_PICKS, QUIZ_EFFORT } = require('./shortlist');
+const { readAnswers, describeViewer, buildQuizCandidates, GENRES, ERAS } = require('./quiz');
 
 const PORT = process.env.PORT || 3000;
 const MAX_NAME_LENGTH = 40;
@@ -67,6 +68,14 @@ const limitUploads = limitRequests(60, ONE_MINUTE_MS);
 const limitSearches = limitRequests(20, ONE_MINUTE_MS);
 // Every shortlist is a paid Claude call, so this caps what the public site can spend.
 const limitDailyShortlists = limitRequests(50, ONE_DAY_MS);
+
+function missingKeysError() {
+  if (!process.env.TMDB_API_TOKEN) return 'TMDB_API_TOKEN is not set in .env yet.';
+  if (!process.env.ANTHROPIC_API_KEY || !process.env.ANTHROPIC_MODEL) {
+    return 'ANTHROPIC_API_KEY and ANTHROPIC_MODEL must be set in .env.';
+  }
+  return null;
+}
 
 function summarizeAll(profiles) {
   return profiles.map((profile) => (profile ? summarizeProfile(profile) : null));
@@ -222,6 +231,8 @@ app.get('/api/options', (req, res) => {
     services: SERVICES.map(({ id, name }) => ({ id, name })),
     regions: REGIONS,
     moods: MOODS,
+    genres: GENRES,
+    eras: ERAS,
   });
 });
 
@@ -264,6 +275,41 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
       candidates,
       people: profiles.filter(Boolean),
       mood,
+      model: process.env.ANTHROPIC_MODEL,
+      claude: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
+    });
+    res.json({ picks, candidateCount: candidates.length, stats });
+  } catch (error) {
+    res.status(502).json({ error: error.message });
+  } finally {
+    tmdb.saveCache();
+  }
+});
+
+// No uploads and nothing saved: the answers arrive with the request and are gone after it.
+app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.json(), async (req, res) => {
+  let answers;
+  try {
+    answers = readAnswers(req.body);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+  const keysError = missingKeysError();
+  if (keysError) {
+    res.status(503).json({ error: keysError });
+    return;
+  }
+
+  const tmdb = createTmdbClient(process.env.TMDB_API_TOKEN);
+  try {
+    const { candidates, stats } = await buildQuizCandidates({ ...answers, tmdb });
+    const picks = await buildShortlist({
+      candidates,
+      people: answers.people.map(describeViewer),
+      mood: answers.mood,
+      maxPicks: QUIZ_PICKS,
+      effort: QUIZ_EFFORT,
       model: process.env.ANTHROPIC_MODEL,
       claude: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
     });
