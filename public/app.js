@@ -86,6 +86,10 @@ function showError(section, message) {
   error.hidden = false;
 }
 
+function captureEvent(event, properties) {
+  window.posthog?.capture?.(event, properties);
+}
+
 async function api(url, options) {
   let response;
   try {
@@ -190,6 +194,7 @@ async function finishRemoval() {
   hideToast();
   try {
     await api(`/api/profiles/${slot}`, { method: 'DELETE' });
+    captureEvent('profile_removed', { profile_slot: slot + 1 });
   } catch (error) {
     showToast("Couldn't remove that person. Refresh the page and try again.");
   }
@@ -262,6 +267,11 @@ function renderUpload(slot) {
       await finishRemoval();
       const body = await api(`/api/profiles/${slot}`, { method: 'POST', body: new FormData(form) });
       profiles = body.profiles;
+      captureEvent('profile_added', {
+        profile_slot: slot + 1,
+        has_export: Boolean(form.elements.files.files.length),
+        has_diary_username: Boolean(form.elements.username.value.trim()),
+      });
       if (slot === 1) addingSecondPerson = false;
       renderPeople();
     } catch (error) {
@@ -316,6 +326,11 @@ function setUpNetflix(section, slot, profile) {
     try {
       const body = await api(`/api/profiles/${slot}/netflix`, { method: 'POST', body: formData });
       profiles = body.profiles;
+      captureEvent('netflix_history_added', {
+        profile_slot: slot + 1,
+        history_replaced: count > 0,
+        title_count: profiles[slot]?.netflixTitleCount ?? 0,
+      });
       renderPeople();
     } catch (error) {
       showError(section, error.message);
@@ -350,6 +365,10 @@ function setUpDiary(section, slot, profile) {
         body: JSON.stringify({ username: input.value }),
       });
       profiles = body.profiles;
+      captureEvent('letterboxd_diary_connected', {
+        profile_slot: slot + 1,
+        diary_updated: Boolean(username),
+      });
       renderPeople();
     } catch (error) {
       const message = field(section, 'diary-error');
@@ -647,7 +666,7 @@ function renderWatchOptions(item, watchOptions) {
   field(item, 'watch').hidden = lines.length === 0;
 }
 
-function renderPick(pick) {
+function renderPick(pick, index) {
   const item = cloneTemplate('pick-template');
   field(item, 'title').textContent = `${pick.title} (${pick.year})`;
   field(item, 'why').textContent = pick.why;
@@ -669,6 +688,10 @@ function renderPick(pick) {
   }
 
   field(item, 'veto').addEventListener('click', () => {
+    captureEvent('shortlist_pick_vetoed', {
+      shortlist_mode: mode,
+      pick_position: index + 1,
+    });
     item.hidden = true;
     updatePicksHeading();
     resultsHeading.focus({ preventScroll: true });
@@ -689,6 +712,12 @@ function summarizeResults({ picks, candidateCount, stats }) {
 }
 
 function showResults({ picks, candidateCount, stats }) {
+  captureEvent('shortlist_generated', {
+    shortlist_mode: mode,
+    people_count: mode === 'quiz' ? quizAnswers.length : filledCount(),
+    picks_count: picks.length,
+    candidate_count: candidateCount,
+  });
   resultsSummary.textContent = summarizeResults({ picks, candidateCount, stats });
   resultsList.replaceChildren(...picks.map(renderPick));
   updatePicksHeading();
@@ -730,6 +759,8 @@ function setUpNavigation() {
   modeOptions.addEventListener('change', (event) => setMode(event.target.value));
   document.getElementById('try-again').addEventListener('click', () => buildShortlist(lastChoices));
   restorePicks.addEventListener('click', () => {
+    const restored_count = resultsList.children.length - visiblePicks().length;
+    captureEvent('shortlist_picks_restored', { shortlist_mode: mode, restored_count });
     for (const item of resultsList.children) item.hidden = false;
     updatePicksHeading();
     resultsHeading.focus({ preventScroll: true });
