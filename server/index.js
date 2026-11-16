@@ -11,6 +11,7 @@ const { createTmdbClient } = require('./tmdb');
 const { buildCandidates, SERVICES, REGIONS } = require('./candidates');
 const { buildShortlist, MOODS, QUIZ_PICKS, QUIZ_EFFORT } = require('./shortlist');
 const { readAnswers, describeViewer, buildQuizCandidates, GENRES, ERAS } = require('./quiz');
+const { createPostHogLogger } = require('./posthog-logs');
 
 const PORT = process.env.PORT || 3000;
 const MAX_NAME_LENGTH = 40;
@@ -18,6 +19,24 @@ const IS_PUBLIC = process.env.PUBLIC_DEPLOY === 'true';
 const ONE_MINUTE_MS = 60 * 1000;
 const ONE_HOUR_MS = 60 * ONE_MINUTE_MS;
 const ONE_DAY_MS = 24 * ONE_HOUR_MS;
+const POSTHOG_KEY = process.env.POSTHOG_PROJECT_TOKEN;
+const POSTHOG_HOST = process.env.POSTHOG_HOST;
+
+for (const key of ['POSTHOG_PROJECT_TOKEN', 'POSTHOG_HOST']) {
+  if (!process.env[key] && process.env.NODE_ENV !== 'production') {
+    console.warn(`${key} variable required by PostHog is missing or un-configured, this causes events to be silently missed. This error stops appearing once ${key} is configured`);
+  }
+}
+
+const { logger: posthogLogger, shutdown: shutdownPostHogLogs } = createPostHogLogger();
+
+function emitPostHogLog(record) {
+  try {
+    posthogLogger?.emit(record);
+  } catch (error) {
+    console.warn('PostHog log emission failed.');
+  }
+}
 
 const app = express();
 
@@ -29,6 +48,15 @@ const upload = multer({
 
 // Everything in public/ is sent to the browser, so secrets must never go there.
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Provides browser-safe PostHog settings without exposing any server credentials.
+app.get('/api/posthog-config', (req, res) => {
+  res.json({
+    projectToken: POSTHOG_KEY,
+    host: POSTHOG_HOST,
+    development: process.env.NODE_ENV !== 'production',
+  });
+});
 
 // Reports only whether each key is set, never the key itself.
 app.get('/api/health', (req, res) => {
@@ -278,8 +306,27 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
       model: process.env.ANTHROPIC_MODEL,
       claude: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
     });
+    emitPostHogLog({
+      severityText: 'INFO',
+      body: 'shortlist generation completed',
+      attributes: {
+        event: 'shortlist_generation_completed',
+        workflow: 'profile',
+        candidate_count: candidates.length,
+        pick_count: picks.length,
+      },
+    });
     res.json({ picks, candidateCount: candidates.length, stats });
   } catch (error) {
+    emitPostHogLog({
+      severityText: 'ERROR',
+      body: 'shortlist generation failed',
+      attributes: {
+        event: 'shortlist_generation_failed',
+        workflow: 'profile',
+        error_type: error.constructor?.name || 'Error',
+      },
+    });
     res.status(502).json({ error: error.message });
   } finally {
     tmdb.saveCache();
@@ -313,8 +360,27 @@ app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.jso
       model: process.env.ANTHROPIC_MODEL,
       claude: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
     });
+    emitPostHogLog({
+      severityText: 'INFO',
+      body: 'shortlist generation completed',
+      attributes: {
+        event: 'shortlist_generation_completed',
+        workflow: 'quiz',
+        candidate_count: candidates.length,
+        pick_count: picks.length,
+      },
+    });
     res.json({ picks, candidateCount: candidates.length, stats });
   } catch (error) {
+    emitPostHogLog({
+      severityText: 'ERROR',
+      body: 'shortlist generation failed',
+      attributes: {
+        event: 'shortlist_generation_failed',
+        workflow: 'quiz',
+        error_type: error.constructor?.name || 'Error',
+      },
+    });
     res.status(502).json({ error: error.message });
   } finally {
     tmdb.saveCache();
@@ -332,9 +398,25 @@ app.use((error, req, res, next) => {
 
 // 127.0.0.1 means only this laptop can reach the app. The public host needs 0.0.0.0.
 if (require.main === module) {
-  app.listen(PORT, IS_PUBLIC ? '0.0.0.0' : '127.0.0.1', () => {
+  const server = app.listen(PORT, IS_PUBLIC ? '0.0.0.0' : '127.0.0.1', () => {
     console.log(`The Shortlist is running on port ${PORT}`);
   });
+
+  let isShuttingDown = false;
+  async function shutdown() {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    server.close(async () => {
+      try {
+        await shutdownPostHogLogs();
+      } catch (error) {
+        console.warn('PostHog log exporter shutdown failed.');
+      }
+      process.exit(0);
+    });
+  }
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 
   if (IS_PUBLIC) {
     deleteExpiredSessions(SESSION_LIFETIME_MS);
