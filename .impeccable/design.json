@@ -1,0 +1,635 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-20T01:47:24+00:00",
+  "title": "Design System: The Shortlist",
+  "extensions": {
+    "colorMeta": {
+      "ink-first": {
+        "role": "secondary",
+        "displayName": "Fluorescent Riso Pink",
+        "canonical": "#c4136d",
+        "oklch": "oklch(53.8% 0.211 358.3)",
+        "tonalRamp": [
+          "#1d000b",
+          "#480325",
+          "#7a0241",
+          "#ae0f60",
+          "#dd3481",
+          "#f771a4",
+          "#fcb0c8",
+          "#fee8ee"
+        ]
+      },
+      "ink-second": {
+        "role": "secondary",
+        "displayName": "Riso Blue",
+        "canonical": "#0b6fb5",
+        "oklch": "oklch(52.8% 0.137 247.5)",
+        "tonalRamp": [
+          "#000c1a",
+          "#022743",
+          "#074572",
+          "#0665a6",
+          "#4087c6",
+          "#74aadd",
+          "#a6cef5",
+          "#e2f0ff"
+        ]
+      },
+      "ink-both": {
+        "role": "tertiary",
+        "displayName": "Overprint Purple",
+        "canonical": "#6a3aa0",
+        "oklch": "oklch(46.0% 0.159 302.2)",
+        "tonalRamp": [
+          "#120026",
+          "#301050",
+          "#51287d",
+          "#7246a7",
+          "#906fbf",
+          "#b097d6",
+          "#d1c0ec",
+          "#f2ebfe"
+        ]
+      },
+      "both-base": {
+        "role": "tertiary",
+        "displayName": "Overprint Blue Base",
+        "canonical": "#6a8ac8",
+        "oklch": "oklch(63.5% 0.101 262.9)",
+        "tonalRamp": [
+          "#060b15",
+          "#1a2539",
+          "#314262",
+          "#4a618e",
+          "#6382bc",
+          "#88a5dc",
+          "#b2caf7",
+          "#e6efff"
+        ]
+      },
+      "both-impression": {
+        "role": "tertiary",
+        "displayName": "Overprint Pink Impression",
+        "canonical": "#ff6bcc",
+        "oklch": "oklch(73.9% 0.207 343.2)",
+        "tonalRamp": [
+          "#14060f",
+          "#361b2b",
+          "#612d4e",
+          "#904074",
+          "#c2539b",
+          "#f768c5",
+          "#feabdd",
+          "#fee7f4"
+        ]
+      },
+      "ink": {
+        "role": "primary",
+        "displayName": "Ink Black",
+        "canonical": "#1c1c22",
+        "oklch": "oklch(22.9% 0.012 285.5)",
+        "tonalRamp": [
+          "#0b0b0f",
+          "#24242a",
+          "#414147",
+          "#616165",
+          "#828285",
+          "#a5a5a6",
+          "#c9c9ca",
+          "#eeeeef"
+        ]
+      },
+      "ink-hover": {
+        "role": "primary",
+        "displayName": "Worn Ink",
+        "canonical": "#3a3a45",
+        "oklch": "oklch(35.3% 0.019 285.4)",
+        "tonalRamp": [
+          "#0b0a10",
+          "#24242d",
+          "#41414c",
+          "#606069",
+          "#818189",
+          "#a4a4aa",
+          "#c9c9cc",
+          "#eeeef0"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Cool Paper",
+        "canonical": "#f3f4f6",
+        "oklch": "oklch(96.7% 0.003 264.5)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828283",
+          "#a4a5a6",
+          "#c8c9cb",
+          "#edeef0"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Clean Sheet",
+        "canonical": "#ffffff",
+        "oklch": "oklch(100.0% 0.000 89.9)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Pencil Grey",
+        "canonical": "#595964",
+        "oklch": "oklch(46.8% 0.018 285.7)",
+        "tonalRamp": [
+          "#0b0b0f",
+          "#24242b",
+          "#41414a",
+          "#60606b",
+          "#81818a",
+          "#a4a4ab",
+          "#c8c8ce",
+          "#eeeef1"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#d1d3d9",
+        "oklch": "oklch(86.7% 0.009 271.3)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252526",
+          "#414243",
+          "#606163",
+          "#818285",
+          "#a3a5a9",
+          "#c7c9cf",
+          "#eceef4"
+        ]
+      },
+      "skeleton": {
+        "role": "neutral",
+        "displayName": "Unprinted",
+        "canonical": "#e3e4e9",
+        "oklch": "oklch(92.0% 0.007 277.2)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252525",
+          "#424242",
+          "#616162",
+          "#828284",
+          "#a4a5a8",
+          "#c8c9cd",
+          "#edeef3"
+        ]
+      },
+      "error": {
+        "role": "neutral",
+        "displayName": "Error Red",
+        "canonical": "#b3261e",
+        "oklch": "oklch(50.1% 0.178 28.7)",
+        "tonalRamp": [
+          "#1f0000",
+          "#4b0403",
+          "#7d0f0b",
+          "#af241d",
+          "#cc594c",
+          "#e4887b",
+          "#fbb5ab",
+          "#fee9e6"
+        ]
+      },
+      "ink-first-dark": {
+        "role": "secondary",
+        "displayName": "Fluorescent Riso Pink (dark)",
+        "canonical": "#ff6fb6",
+        "oklch": "oklch(73.6% 0.189 352.0)",
+        "tonalRamp": [
+          "#14060c",
+          "#361b27",
+          "#622e46",
+          "#914268",
+          "#c3578c",
+          "#f86cb1",
+          "#ffadd0",
+          "#fee7f0"
+        ]
+      },
+      "ink-second-dark": {
+        "role": "secondary",
+        "displayName": "Riso Blue (dark)",
+        "canonical": "#5cb4ff",
+        "oklch": "oklch(74.7% 0.138 246.7)",
+        "tonalRamp": [
+          "#050c13",
+          "#182734",
+          "#28455e",
+          "#37658d",
+          "#4888bf",
+          "#58acf3",
+          "#9ccffe",
+          "#e2f1ff"
+        ]
+      },
+      "ink-both-dark": {
+        "role": "tertiary",
+        "displayName": "Overprint Purple (dark)",
+        "canonical": "#b590ff",
+        "oklch": "oklch(73.3% 0.159 297.7)",
+        "tonalRamp": [
+          "#0c0914",
+          "#272136",
+          "#463962",
+          "#685492",
+          "#8c70c4",
+          "#b18dfa",
+          "#cfbdfc",
+          "#f0ebfe"
+        ]
+      },
+      "ink-dark": {
+        "role": "primary",
+        "displayName": "Ink Black (dark)",
+        "canonical": "#efeff2",
+        "oklch": "oklch(95.3% 0.004 286.3)",
+        "tonalRamp": [
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616162",
+          "#828283",
+          "#a5a5a6",
+          "#c9c9cb",
+          "#eeeef1"
+        ]
+      },
+      "ink-hover-dark": {
+        "role": "primary",
+        "displayName": "Worn Ink (dark)",
+        "canonical": "#c9c9d1",
+        "oklch": "oklch(83.8% 0.011 286.2)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252526",
+          "#424243",
+          "#616164",
+          "#828286",
+          "#a4a4ab",
+          "#c8c8d0",
+          "#eeeef4"
+        ]
+      },
+      "paper-dark": {
+        "role": "neutral",
+        "displayName": "Cool Paper (dark)",
+        "canonical": "#121217",
+        "oklch": "oklch(18.5% 0.010 285.4)",
+        "tonalRamp": [
+          "#0b0b0f",
+          "#242429",
+          "#414146",
+          "#616164",
+          "#828284",
+          "#a5a5a6",
+          "#c9c9ca",
+          "#eeeeef"
+        ]
+      },
+      "panel-dark": {
+        "role": "neutral",
+        "displayName": "Clean Sheet (dark)",
+        "canonical": "#1b1b22",
+        "oklch": "oklch(22.5% 0.014 285.3)",
+        "tonalRamp": [
+          "#0b0a10",
+          "#24242b",
+          "#414147",
+          "#616166",
+          "#828285",
+          "#a5a5a7",
+          "#c9c9ca",
+          "#eeeef0"
+        ]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Pencil Grey (dark)",
+        "canonical": "#a6a6b2",
+        "oklch": "oklch(72.9% 0.017 286.0)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#252527",
+          "#414146",
+          "#606067",
+          "#81818a",
+          "#a4a4b0",
+          "#c8c8d2",
+          "#edeef6"
+        ]
+      },
+      "rule-dark": {
+        "role": "neutral",
+        "displayName": "Hairline (dark)",
+        "canonical": "#34343e",
+        "oklch": "oklch(32.9% 0.018 285.4)",
+        "tonalRamp": [
+          "#0b0a10",
+          "#24242d",
+          "#41414a",
+          "#606068",
+          "#818288",
+          "#a4a4a9",
+          "#c9c9cb",
+          "#eeeef0"
+        ]
+      },
+      "skeleton-dark": {
+        "role": "neutral",
+        "displayName": "Unprinted (dark)",
+        "canonical": "#24242c",
+        "oklch": "oklch(26.4% 0.015 285.3)",
+        "tonalRamp": [
+          "#0b0a10",
+          "#24242c",
+          "#414148",
+          "#606166",
+          "#828286",
+          "#a5a5a7",
+          "#c9c9ca",
+          "#eeeef0"
+        ]
+      },
+      "error-dark": {
+        "role": "neutral",
+        "displayName": "Error Red (dark)",
+        "canonical": "#ff8a80",
+        "oklch": "oklch(75.9% 0.144 26.1)",
+        "tonalRamp": [
+          "#130807",
+          "#321f1d",
+          "#5c3632",
+          "#8a4e48",
+          "#bb675f",
+          "#ee8178",
+          "#ffb3aa",
+          "#ffe9e6"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Step and shortlist headings, uppercase. 2rem at 420px and below, 3rem from 760px, 4rem in the wide program column."
+      },
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "The masthead name only, uppercase."
+      },
+      "program-number": {
+        "displayName": "Program Number",
+        "purpose": "Two-digit entry numbers in the person's ink; 1.5rem at 420px and below."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Film titles and section headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Inputs and running text."
+      },
+      "body-small": {
+        "displayName": "Body Small",
+        "purpose": "The why line (62ch max), buttons and chips."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Form labels, legends, step names, disclosure summaries."
+      },
+      "program-label": {
+        "displayName": "Program Label",
+        "purpose": "Uppercase whose-taste label and New pick tag; the date/people/mood line uses it at 700 and 0.8125rem."
+      },
+      "note": {
+        "displayName": "Note",
+        "purpose": "Muted field notes, film notes, mood descriptions, tagline."
+      }
+    },
+    "shadows": [
+      {
+        "name": "toast-lift",
+        "value": "0 8px 24px rgb(0 0 0 / 0.18)",
+        "purpose": "Only on the floating toast."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-state",
+        "value": "150ms ease-out",
+        "purpose": "Colour and border transitions on buttons, fields, chips, moods, dropzone, chevron."
+      },
+      {
+        "name": "ease-print",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The printing-in of a swapped pick."
+      },
+      {
+        "name": "print-in",
+        "value": "360ms clip-path inset(0 0 100% 0) to inset(0 0 0 0)",
+        "purpose": "A swapped-in pick reveals top-down."
+      },
+      {
+        "name": "register",
+        "value": "480ms left 0.33em to 0.1em",
+        "purpose": "The overprint impression of a shared swapped pick settles into register."
+      },
+      {
+        "name": "pulse",
+        "value": "1.2s ease-in-out infinite alternate, opacity 1 to 0.55",
+        "purpose": "Loading skeleton entries."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "animation: none; transition: none",
+        "purpose": "prefers-reduced-motion disables all motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "max-width: 420px"
+      },
+      {
+        "name": "tablet",
+        "value": "min-width: 760px"
+      },
+      {
+        "name": "program",
+        "value": "min-width: 1040px"
+      }
+    ],
+    "overprint": {
+      "light": {
+        "base": "both-base",
+        "impression": "both-impression",
+        "blend": "multiply",
+        "layer": 0,
+        "offset": "3px"
+      },
+      "dark": {
+        "base": "ink-both-dark",
+        "impression": "ink-first-dark",
+        "blend": "normal",
+        "layer": -1,
+        "offset": "3px"
+      }
+    }
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Solid ink action; full-width as each step's main action.",
+      "html": "<button class=\"ds-btn-primary\">Build my shortlist</button>",
+      "css": ".ds-btn-primary { font-family: Archivo, system-ui, sans-serif; min-height: 44px; padding: 10px 20px; background: var(--ink, #1c1c22); border: 1.5px solid var(--ink, #1c1c22); border-radius: 2px; color: var(--paper, #f3f4f6); font-size: 0.9375rem; font-weight: 650; cursor: pointer; transition: background-color 150ms ease-out, border-color 150ms ease-out; } .ds-btn-primary:hover { background: var(--ink-hover, #3a3a45); border-color: var(--ink-hover, #3a3a45); } .ds-btn-primary:focus-visible { outline: 2px solid var(--ink, #1c1c22); outline-offset: 2px; } .ds-btn-primary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ink outline for the alternative action; fills with ink on hover.",
+      "html": "<button class=\"ds-btn-secondary\">Change mood</button>",
+      "css": ".ds-btn-secondary { font-family: Archivo, system-ui, sans-serif; min-height: 44px; padding: 10px 20px; background: transparent; border: 1.5px solid var(--ink, #1c1c22); border-radius: 2px; color: var(--ink, #1c1c22); font-size: 0.9375rem; font-weight: 650; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; } .ds-btn-secondary:hover { background: var(--ink, #1c1c22); color: var(--paper, #f3f4f6); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--ink, #1c1c22); outline-offset: 2px; } .ds-btn-secondary:active { transform: translateY(1px); }"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Underlined muted text for the least action: Remove, Undo, Read more.",
+      "html": "<button class=\"ds-btn-quiet\">Remove</button>",
+      "css": ".ds-btn-quiet { font-family: Archivo, system-ui, sans-serif; min-height: 44px; padding: 10px 0; background: none; border: none; color: var(--muted, #595964); font-size: 0.9375rem; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; transition: color 150ms ease-out; } .ds-btn-quiet:hover { color: var(--ink, #1c1c22); } .ds-btn-quiet:focus-visible { outline: 2px solid var(--ink, #1c1c22); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Square field on Clean Sheet; the border turns ink on focus.",
+      "html": "<label class=\"ds-label\">Letterboxd username<input class=\"ds-input\" placeholder=\"yourname\"></label>",
+      "css": ".ds-label { display: block; font-family: Archivo, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; color: var(--ink, #1c1c22); } .ds-input { display: block; width: 100%; min-height: 44px; margin-top: 6px; padding: 10px 12px; background: var(--panel, #ffffff); border: 1.5px solid var(--rule, #d1d3d9); border-radius: 2px; color: var(--ink, #1c1c22); font-family: Archivo, system-ui, sans-serif; font-size: 1rem; font-weight: 400; transition: border-color 150ms ease-out; } .ds-input::placeholder { color: var(--muted, #595964); } .ds-input:hover { border-color: var(--muted, #595964); } .ds-input:focus { border-color: var(--ink, #1c1c22); outline: none; }"
+    },
+    {
+      "name": "Service Chips",
+      "kind": "chip",
+      "refersTo": "chip",
+      "description": "Multi-select chips; selected inverts to ink.",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip\" aria-pressed=\"true\">Netflix</button><button class=\"ds-chip\" aria-pressed=\"false\">Max</button><button class=\"ds-chip\" aria-pressed=\"false\">Mubi</button></div>",
+      "css": ".ds-chips { display: flex; flex-wrap: wrap; gap: 8px; } .ds-chip { font-family: Archivo, system-ui, sans-serif; padding: 9px 14px; background: var(--panel, #ffffff); border: 1.5px solid var(--rule, #d1d3d9); border-radius: 2px; color: var(--ink, #1c1c22); font-size: 0.9375rem; font-weight: 400; cursor: pointer; transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out; } .ds-chip:hover { border-color: var(--ink, #1c1c22); } .ds-chip[aria-pressed=\"true\"] { background: var(--ink, #1c1c22); border-color: var(--ink, #1c1c22); color: var(--paper, #f3f4f6); } .ds-chip:focus-visible { outline: 2px solid var(--ink, #1c1c22); outline-offset: 2px; }"
+    },
+    {
+      "name": "Mood Option",
+      "kind": "custom",
+      "refersTo": "mood-option",
+      "description": "Option row with a bold name and muted description; selected inverts to ink.",
+      "html": "<div class=\"ds-moods\"><button class=\"ds-mood\" aria-pressed=\"true\"><strong>Light and easy</strong><small>Comfortable, funny, low stakes</small></button><button class=\"ds-mood\" aria-pressed=\"false\"><strong>Intense and gripping</strong><small>Tension you can feel</small></button></div>",
+      "css": ".ds-moods { display: grid; gap: 8px; } .ds-mood { display: block; width: 100%; text-align: left; font-family: Archivo, system-ui, sans-serif; padding: 12px 16px; background: var(--panel, #ffffff); border: 1.5px solid var(--rule, #d1d3d9); border-radius: 2px; color: var(--ink, #1c1c22); font-size: 1rem; cursor: pointer; transition: background-color 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out; } .ds-mood strong { display: block; font-weight: 700; } .ds-mood small { display: block; color: var(--muted, #595964); font-size: 0.8125rem; } .ds-mood:hover { border-color: var(--ink, #1c1c22); } .ds-mood[aria-pressed=\"true\"] { background: var(--ink, #1c1c22); border-color: var(--ink, #1c1c22); color: var(--paper, #f3f4f6); } .ds-mood[aria-pressed=\"true\"] small { color: var(--paper, #f3f4f6); opacity: 0.8; } .ds-mood:focus-visible { outline: 2px solid var(--ink, #1c1c22); outline-offset: 2px; }"
+    },
+    {
+      "name": "Step Tracker",
+      "kind": "nav",
+      "refersTo": "step-number-current",
+      "description": "Masthead steps with circled tabular numbers; the current step fills with ink.",
+      "html": "<ol class=\"ds-steps\"><li><button class=\"ds-step\"><span class=\"ds-step-n\">1</span>You</button></li><li><button class=\"ds-step\" aria-current=\"step\"><span class=\"ds-step-n\">2</span>Preferences</button></li><li><button class=\"ds-step\" disabled><span class=\"ds-step-n\">3</span>Shortlist</button></li></ol>",
+      "css": ".ds-steps { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; } .ds-step { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; background: none; border: none; color: var(--muted, #595964); font-family: Archivo, system-ui, sans-serif; font-size: 0.875rem; font-weight: 600; cursor: pointer; } .ds-step:hover:not(:disabled) { color: var(--ink, #1c1c22); } .ds-step:disabled { opacity: 0.5; cursor: default; } .ds-step[aria-current=\"step\"] { color: var(--ink, #1c1c22); } .ds-step-n { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1.5px solid currentColor; border-radius: 50%; font-size: 0.75rem; font-variant-numeric: tabular-nums; } .ds-step[aria-current=\"step\"] .ds-step-n { background: var(--ink, #1c1c22); border-color: var(--ink, #1c1c22); color: var(--paper, #f3f4f6); } .ds-step:focus-visible { outline: 2px solid var(--ink, #1c1c22); outline-offset: 2px; }"
+    },
+    {
+      "name": "Program Entry",
+      "kind": "card",
+      "refersTo": "new-pick-tag",
+      "description": "Signature: a ruled, numbered pick in the person's ink; shared picks overprint pink on blue.",
+      "html": "<ol class=\"ds-picks\"><li class=\"ds-pick\" style=\"--ink-pick: var(--ink-first, #c4136d)\"><span class=\"ds-num\">01</span><span class=\"ds-poster\">Paris, Texas</span><div><div class=\"ds-title\">Paris, Texas (1984)</div><div class=\"ds-label-ink\">Sam's pick</div><p class=\"ds-why\">A slow, sunlit road film for the quiet mood you asked for.</p><div class=\"ds-facts\">Mubi</div><button class=\"ds-veto\">Not tonight</button></div></li><li class=\"ds-pick ds-both\" style=\"--ink-pick: var(--ink-both, #6a3aa0)\"><span class=\"ds-num\" data-n=\"02\">02</span><span class=\"ds-poster\">Arrival</span><div><div class=\"ds-title\">Arrival (2016)</div><div class=\"ds-label-ink\">Both of you</div> <span class=\"ds-new\">New pick</span><p class=\"ds-why\">Thoughtful sci-fi you both rated highly.</p><div class=\"ds-facts\">Netflix</div><button class=\"ds-veto\">Not tonight</button></div></li></ol>",
+      "css": ".ds-picks { margin: 0; padding: 0; list-style: none; font-family: Archivo, system-ui, sans-serif; color: var(--ink, #1c1c22); } .ds-pick { display: grid; grid-template-columns: 36px 76px minmax(0, 1fr); gap: 14px; padding: 20px 0 24px; border-top: 1.5px solid var(--ink, #1c1c22); } .ds-num { position: relative; isolation: isolate; color: var(--ink-pick); font-size: 1.875rem; font-stretch: 68%; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; } .ds-both .ds-num { color: var(--both-base, #6a8ac8); } .ds-both .ds-num::after { content: attr(data-n); position: absolute; z-index: var(--impression-layer, 0); top: 0; left: 3px; color: var(--both-impression, #ff6bcc); mix-blend-mode: var(--overprint, multiply); } .ds-poster { display: flex; align-items: flex-end; aspect-ratio: 2 / 3; padding: 6px; background: var(--skeleton, #e3e4e9); color: var(--ink-pick); font-size: 0.8125rem; font-stretch: 68%; font-weight: 850; line-height: 1.05; text-transform: uppercase; } .ds-title { font-size: 1.25rem; font-stretch: 85%; font-weight: 800; line-height: 1.15; } .ds-label-ink { display: inline-block; margin-top: 6px; color: var(--ink-pick); font-size: 0.75rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; } .ds-new { padding: 2px 6px; background: var(--ink, #1c1c22); color: var(--paper, #f3f4f6); font-size: 0.6875rem; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; } .ds-why { max-width: 62ch; margin: 8px 0 0; font-size: 0.9375rem; line-height: 1.5; } .ds-facts { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--rule, #d1d3d9); font-weight: 600; font-variant-numeric: tabular-nums; } .ds-veto { margin-top: 12px; min-height: 40px; padding: 6px 14px; background: transparent; border: 1.5px solid var(--ink, #1c1c22); border-radius: 2px; color: var(--ink, #1c1c22); font: inherit; font-size: 0.875rem; font-weight: 650; cursor: pointer; transition: background-color 150ms ease-out, color 150ms ease-out; } .ds-veto:hover { background: var(--ink, #1c1c22); color: var(--paper, #f3f4f6); } .ds-veto:focus-visible { outline: 2px solid var(--ink, #1c1c22); outline-offset: 2px; }"
+    },
+    {
+      "name": "Toast",
+      "kind": "custom",
+      "refersTo": "toast",
+      "description": "Ink bar with a quiet paper action; the only element that lifts.",
+      "html": "<div class=\"ds-toast\" role=\"status\">Swapped in Arrival. <button class=\"ds-toast-action\">Undo</button></div>",
+      "css": ".ds-toast { display: inline-flex; align-items: center; gap: 16px; padding: 4px 16px; background: var(--ink, #1c1c22); border-radius: 2px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); color: var(--paper, #f3f4f6); font-family: Archivo, system-ui, sans-serif; font-size: 0.9375rem; } .ds-toast-action { min-height: 44px; padding: 10px 0; background: none; border: none; color: var(--paper, #f3f4f6); font: inherit; font-weight: 650; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; } .ds-toast-action:hover { opacity: 0.8; } .ds-toast-action:focus-visible { outline: 2px solid var(--paper, #f3f4f6); outline-offset: 2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Repertory Program",
+    "overview": "The Shortlist is set like a neighbourhood repertory cinema's two-colour risograph program. A cool off-white sheet (a near-black sheet in dark mode) carries near-black ink. Two riso inks carry one meaning each: fluorescent pink is the first person, blue the second, and where they overprint, purple means \"Both of you\". Ink-black does the work of the page: actions, selection, the current step, the rules that divide it. Nothing is coloured for decoration.\n\nStructure comes from printed rules rather than boxes: 2px ink rules head each section and the masthead, 1.5px rules head each program entry, hairlines divide facts and lists. Corners are square (2px at most), surfaces are flat, and the only shadow belongs to a transient toast. One variable grotesque, Archivo, runs across its width axis: condensed heavy capitals for headings, the wordmark and program numbers; normal width for everything you read and operate.\n\nDensity is calm. The setup steps are a narrow centred column of ruled sections; the shortlist widens into a program, numbered entries in the person's ink with a poster, title, the reason for the pick and a hairline facts row. Motion is limited to short colour transitions and one authored moment: a swapped-in pick prints into place.",
+    "keyCharacteristics": [
+      "Two inks plus their overprint, each tied to exactly one person or to both.",
+      "Ink-black for every action and every selected state.",
+      "Ruled sections, never rounded cards; flat paper, no surface shadows.",
+      "One variable grotesque: condensed heavy caps to announce, normal width to read.",
+      "Light and dark follow the device; both are first-class printings of the same program."
+    ],
+    "rules": [
+      {
+        "name": "The One Ink, One Person Rule",
+        "body": "Pink is the first person, blue the second, purple both. An ink appears only where it identifies whose a thing is; it never decorates, never marks state, never fills a button.",
+        "section": "colors"
+      },
+      {
+        "name": "The Black Does the Work Rule",
+        "body": "Every action and every selection is ink-black on paper, or paper on ink-black. Selection is never shown in a person's ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The Real Overprint Rule",
+        "body": "\"Both of you\" is printed, not picked from a swatch: two impressions slightly off register, blended so their overlap lands on the purple.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Widths Rule",
+        "body": "Condensed heavy capitals announce (headings, wordmark, numbers, poster fallbacks); normal width does everything you read or operate. Nothing in between is condensed below 85%.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Count Rule",
+        "body": "Anything counted or rated (program numbers, step numbers, counts, ratings, facts) uses tabular figures.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Sheet Rule",
+        "body": "Nothing printed on the page casts a shadow. Only the toast, which floats above the sheet, may lift.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do tie each ink to exactly one meaning: pink first person, blue second person, purple \"Both of you\".",
+      "Do show every action and every selected state in ink-black, inverted to paper text.",
+      "Do divide with rules: 2px ink for sections and the masthead, 1.5px for program entries, 1px hairlines for facts and lists.",
+      "Do keep controls square-cornered (2px) with 1.5px borders and a 44px minimum touch height.",
+      "Do set headings, the wordmark and program numbers in Archivo condensed (68 to 70%) at 850 to 900 in capitals, and everything operable at normal width.",
+      "Do print \"Both of you\" as a real overprint of two impressions slightly off register.",
+      "Do design light and dark together; both follow the device.",
+      "Do honour reduced motion by turning off every animation and transition."
+    ],
+    "donts": [
+      "Don't use a person's ink for buttons, selection, hover or status.",
+      "Don't box content in rounded cards or give printed surfaces a shadow; only the toast lifts.",
+      "Don't fall back to a streaming-app poster grid; picks are numbered program entries.",
+      "Don't bring back the cream ground, Georgia serif and forest-green palette the program replaced.",
+      "Don't add a second typeface; Archivo's width axis carries the contrast.",
+      "Don't add motion beyond short colour transitions and the printing-in of a swapped pick."
+    ]
+  }
+}

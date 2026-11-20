@@ -20,7 +20,7 @@
   --skeleton: #e3e4e9;
   --error: #b3261e;
   /* Inks carry one meaning each: first person, second person, both. */
-  --ink-first: #d61a78;
+  --ink-first: #c4136d;
   --ink-second: #0b6fb5;
   --ink-both: #6a3aa0;
   /* Light: pink printed over blue, multiplied so the overlap lands on --ink-both. */
@@ -657,7 +657,7 @@ button.quiet:hover:not(:disabled) { background: none; color: var(--ink); }
   position: absolute;
   z-index: var(--impression-layer);
   top: 0;
-  left: 3px;
+  left: 0.1em;
   color: var(--both-impression);
   mix-blend-mode: var(--overprint);
   transition: left 240ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -818,8 +818,8 @@ button.veto:hover:not(:disabled) { background: var(--ink); color: var(--paper); 
 }
 
 @keyframes register {
-  from { left: 10px; }
-  to { left: 3px; }
+  from { left: 0.33em; }
+  to { left: 0.1em; }
 }
 
 /* The wait prints the program's layout before its content. */

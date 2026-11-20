@@ -780,8 +780,8 @@ function summarizeResults({ picks, candidateCount, stats }) {
 function describeTonight() {
   const date = new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   const mood = moodOptions.querySelector('input:checked')?.closest('label')?.querySelector('strong')?.textContent;
-  // Non-breaking spaces keep "Sam & Alex" together when the line wraps.
-  return [date, viewerNames().join('\u00a0&\u00a0'), mood].filter(Boolean).join(' · ');
+  // Non-breaking spaces keep "Sam & Alex" together and each dot at the end of its line.
+  return [date, viewerNames().join('\u00a0&\u00a0'), mood].filter(Boolean).join('\u00a0· ');
 }
 
 function showResults({ picks, backups, candidateCount, stats }) {
