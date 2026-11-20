@@ -11,7 +11,11 @@ credentials.json
 data/
 
 # AI Agent Local State / Logs (keep curated logs in journal/)
-.claude/
+.claude/*
+# Shared agent skills (Impeccable) are committed so every session gets them.
+!.claude/skills/
+!.claude/agents/
+!.claude/skills/impeccable/scripts/data/
 .codex/
 .cursor/
 .opencode/
