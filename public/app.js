@@ -5,6 +5,7 @@ const MODE_STORAGE_KEY = 'shortlist-mode';
 const QUIZ_STORAGE_KEY = 'shortlist-quiz';
 const MAX_QUIZ_PEOPLE = 2;
 const MAX_SERVICES_SHOWN = 2;
+const MAX_GENRES_SHOWN = 2;
 const UNDO_WINDOW_MS = 6000;
 const LOADING_MESSAGE_MS = 3000;
 const LOADING_MESSAGES = [
@@ -53,6 +54,7 @@ const failure = document.getElementById('failure');
 const failureMessage = document.getElementById('failure-message');
 const results = document.getElementById('results');
 const resultsHeading = document.getElementById('results-heading');
+const resultsContext = document.getElementById('results-context');
 const resultsSummary = document.getElementById('results-summary');
 const resultsList = document.getElementById('results-list');
 const restorePicks = document.getElementById('restore-picks');
@@ -664,19 +666,64 @@ function renderWatchOptions(item, watchOptions) {
       return line;
     });
   field(item, 'watch').append(...lines);
-  field(item, 'watch').hidden = lines.length === 0;
+  field(item, 'watch-details').hidden = lines.length === 0;
+}
+
+// The service leads the facts row, since it decides whether you can watch tonight.
+function renderFacts(item, pick) {
+  const service = whereToWatch(pick);
+  // Two genres keep the facts row to one line on most cards.
+  const genres = pick.genres.slice(0, MAX_GENRES_SHOWN).join(', ');
+  const rest = [pick.runtime && `${pick.runtime} min`, genres].filter(Boolean);
+  const facts = field(item, 'facts');
+  if (service) {
+    const strong = document.createElement('span');
+    strong.className = 'pick-service';
+    strong.textContent = service;
+    facts.append(strong, rest.length ? ` · ${rest.join(' · ')}` : '');
+  } else {
+    facts.textContent = rest.join(' · ');
+  }
+}
+
+// Read more only shows when the description is actually cut off.
+function fitOverview(item) {
+  const overview = field(item, 'overview');
+  if (overview.classList.contains('is-expanded')) return;
+  field(item, 'read-more').hidden = overview.scrollHeight <= overview.clientHeight + 1;
+}
+
+function fitOverviews() {
+  for (const item of resultsList.children) fitOverview(item);
+}
+
+function viewerNames() {
+  return mode === 'quiz'
+    ? quizAnswers.map((person) => person.name.trim())
+    : profiles.filter(Boolean).map((profile) => profile.name);
+}
+
+// Each person prints in their own ink, and a pick for both prints in the overprint.
+function inkFor(label) {
+  if (!label) return 'first';
+  if (label === 'Both of you') return 'both';
+  return label === `${viewerNames()[0]}'s pick` ? 'first' : 'second';
 }
 
 function renderPick(pick, index) {
   const item = cloneTemplate('pick-template');
+  item.dataset.ink = inkFor(pick.label);
   field(item, 'title').textContent = `${pick.title} (${pick.year})`;
   field(item, 'why').textContent = pick.why;
-  field(item, 'facts').textContent = [whereToWatch(pick), pick.runtime && `${pick.runtime} min`]
-    .filter(Boolean)
-    .join(' · ');
+  renderFacts(item, pick);
   if (!pick.services) renderWatchOptions(item, pick.watchOptions);
-  field(item, 'genres').textContent = pick.genres.join(', ');
   field(item, 'overview').textContent = pick.overview;
+  field(item, 'overview').hidden = !pick.overview;
+  field(item, 'read-more').addEventListener('click', (event) => {
+    const expanded = field(item, 'overview').classList.toggle('is-expanded');
+    event.currentTarget.setAttribute('aria-expanded', String(expanded));
+    event.currentTarget.textContent = expanded ? 'Show less' : 'Read more';
+  });
 
   if (pick.label) {
     field(item, 'label').textContent = pick.label;
@@ -686,6 +733,9 @@ function renderPick(pick, index) {
     field(item, 'poster').src = `${POSTER_BASE_URL}${pick.posterPath}`;
     field(item, 'poster').alt = `Poster for ${pick.title}`;
     field(item, 'poster').hidden = false;
+  } else {
+    field(item, 'poster-fallback').textContent = pick.title;
+    field(item, 'poster-fallback').hidden = false;
   }
 
   // A turned-down film makes way for the next backup, until the backups run out.
@@ -698,7 +748,18 @@ function renderPick(pick, index) {
     });
     item.hidden = true;
     if (replacement) {
-      item.after(renderPick(replacement, index));
+      const swappedIn = renderPick(replacement, index);
+      // Stays marked until it's touched, so the change is never missed.
+      field(swappedIn, 'new').hidden = false;
+      swappedIn.classList.add('is-new');
+      const clearNew = () => {
+        field(swappedIn, 'new').hidden = true;
+        swappedIn.classList.remove('is-new');
+      };
+      swappedIn.addEventListener('pointerdown', clearNew, { once: true });
+      swappedIn.addEventListener('focusin', clearNew, { once: true });
+      item.after(swappedIn);
+      fitOverview(swappedIn);
       showToast(`Swapped in ${replacement.title}.`);
     }
     updatePicksHeading();
@@ -719,6 +780,13 @@ function summarizeResults({ picks, candidateCount, stats }) {
     : `Checked ${stats.checked} films and none are on your services. Try adding another service.`;
 }
 
+function describeTonight() {
+  const date = new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const mood = moodOptions.querySelector('input:checked')?.closest('label')?.querySelector('strong')?.textContent;
+  // Non-breaking spaces keep "Sam & Alex" together and each dot at the end of its line.
+  return [date, viewerNames().join('\u00a0&\u00a0'), mood].filter(Boolean).join('\u00a0· ');
+}
+
 function showResults({ picks, backups, candidateCount, stats }) {
   captureEvent('shortlist_generated', {
     shortlist_mode: mode,
@@ -726,12 +794,14 @@ function showResults({ picks, backups, candidateCount, stats }) {
     picks_count: picks.length,
     candidate_count: candidateCount,
   });
+  resultsContext.textContent = describeTonight();
   resultsSummary.textContent = summarizeResults({ picks, candidateCount, stats });
   backupPicks = [...backups];
   resultsList.replaceChildren(...picks.map(renderPick));
   updatePicksHeading();
   if (picks.length === 0) resultsHeading.textContent = 'Nothing to pick from tonight';
   showPanel(results);
+  fitOverviews();
 }
 
 async function buildShortlist(choices) {
@@ -776,6 +846,8 @@ function setUpNavigation() {
   });
 
   // Leaving the page ends the Undo window, so the removal still has to reach the server.
+  window.addEventListener('resize', fitOverviews);
+
   window.addEventListener('pagehide', () => {
     if (pendingRemoval) fetch(`/api/profiles/${pendingRemoval.slot}`, { method: 'DELETE', keepalive: true });
   });
