@@ -5,6 +5,7 @@ const MODE_STORAGE_KEY = 'shortlist-mode';
 const QUIZ_STORAGE_KEY = 'shortlist-quiz';
 const MAX_QUIZ_PEOPLE = 2;
 const MAX_SERVICES_SHOWN = 2;
+const MAX_GENRES_SHOWN = 2;
 const UNDO_WINDOW_MS = 6000;
 const LOADING_MESSAGE_MS = 3000;
 const LOADING_MESSAGES = [
@@ -671,7 +672,9 @@ function renderWatchOptions(item, watchOptions) {
 // The service leads the facts row, since it decides whether you can watch tonight.
 function renderFacts(item, pick) {
   const service = whereToWatch(pick);
-  const rest = [pick.runtime && `${pick.runtime} min`, pick.genres.join(', ')].filter(Boolean);
+  // Two genres keep the facts row to one line on most cards.
+  const genres = pick.genres.slice(0, MAX_GENRES_SHOWN).join(', ');
+  const rest = [pick.runtime && `${pick.runtime} min`, genres].filter(Boolean);
   const facts = field(item, 'facts');
   if (service) {
     const strong = document.createElement('span');
