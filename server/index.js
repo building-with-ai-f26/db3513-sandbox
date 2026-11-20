@@ -299,7 +299,7 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
   const tmdb = createTmdbClient(process.env.TMDB_API_TOKEN);
   try {
     const { candidates, stats } = await buildCandidates({ profiles, serviceIds, region, tmdb });
-    const picks = await buildShortlist({
+    const { picks, backups } = await buildShortlist({
       candidates,
       people: profiles.filter(Boolean),
       mood,
@@ -316,7 +316,7 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
         pick_count: picks.length,
       },
     });
-    res.json({ picks, candidateCount: candidates.length, stats });
+    res.json({ picks, backups, candidateCount: candidates.length, stats });
   } catch (error) {
     emitPostHogLog({
       severityText: 'ERROR',
@@ -351,7 +351,7 @@ app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.jso
   const tmdb = createTmdbClient(process.env.TMDB_API_TOKEN);
   try {
     const { candidates, stats } = await buildQuizCandidates({ ...answers, tmdb });
-    const picks = await buildShortlist({
+    const { picks, backups } = await buildShortlist({
       candidates,
       people: answers.people.map(describeViewer),
       mood: answers.mood,
@@ -370,7 +370,7 @@ app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.jso
         pick_count: picks.length,
       },
     });
-    res.json({ picks, candidateCount: candidates.length, stats });
+    res.json({ picks, backups, candidateCount: candidates.length, stats });
   } catch (error) {
     emitPostHogLog({
       severityText: 'ERROR',

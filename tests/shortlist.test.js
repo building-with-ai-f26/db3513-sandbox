@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Anthropic = require('@anthropic-ai/sdk');
-const { buildShortlist, MOODS, QUIZ_PICKS } = require('../server/shortlist');
+const { buildShortlist, MOODS, QUIZ_PICKS, BACKUP_PICKS } = require('../server/shortlist');
 
 // Made-up films and a pretend Claude, so these tests never touch the network or cost money.
 function film(id, sources = [{ type: 'watchlist', person: 'Sam' }]) {
@@ -67,24 +67,24 @@ function shortlist(claude, overrides = {}) {
 }
 
 test('returns six picks in the order Claude ranked them', async () => {
-  const picks = await shortlist(fakeClaude(reply(SIX_PICKS)));
+  const { picks } = await shortlist(fakeClaude(reply(SIX_PICKS)));
 
   assert.deepEqual(picks.map(({ id }) => id), [6, 5, 4, 3, 2, 1]);
   assert.equal(picks[0].title, 'Film 6');
   assert.equal(picks[0].why, 'A reason for film 6.');
 });
 
-test('sends the mood, taste and candidates, and asks for six structured picks', async () => {
+test('sends the mood, taste and candidates, and asks for six picks plus three backups', async () => {
   const claude = fakeClaude(reply(SIX_PICKS));
   await shortlist(claude);
 
   const [request] = claude.requests;
   const { content } = request.messages[0];
   const sent = JSON.parse(content.slice(content.indexOf('{')));
-  assert.match(content, /exactly 6 films/);
+  assert.match(content, /exactly 9 films/);
   assert.equal(request.model, 'test-model');
   assert.equal(request.output_config.format.type, 'json_schema');
-  assert.deepEqual(request.output_config.format.schema.required, slotNames(6));
+  assert.deepEqual(request.output_config.format.schema.required, slotNames(9));
   assert.equal(sent.mood, MOODS.find(({ id }) => id === 'light').name);
   assert.deepEqual(sent.viewers[0].topRated, [{ name: 'Alpha', year: '1999', rating: 5 }]);
   assert.equal(sent.candidates.length, 12);
@@ -97,9 +97,53 @@ test('asks for at least two films from outside the watchlist', async () => {
   assert.match(claude.requests[0].system, /at least 2 films whose sources are all "recommended"/);
 });
 
+const NINE_PICKS = [9, 8, 7, 6, 5, 4, 3, 2, 1].map(pick);
+
+test('keeps the last three picks back as backups, in order', async () => {
+  const { picks, backups } = await shortlist(fakeClaude(reply(NINE_PICKS)));
+
+  assert.deepEqual(picks.map(({ id }) => id), [9, 8, 7, 6, 5, 4]);
+  assert.deepEqual(backups.map(({ id }) => id), [3, 2, 1]);
+  assert.equal(backups[0].why, 'A reason for film 3.');
+});
+
+test('tells Claude the last picks are backups', async () => {
+  const claude = fakeClaude(reply(NINE_PICKS));
+  await shortlist(claude);
+
+  assert.match(claude.requests[0].system, /The last 3 are backups/);
+});
+
+test('a backup moves up when a shown pick is invalid', async () => {
+  const { picks, backups } = await shortlist(fakeClaude(reply([MADE_UP, ...NINE_PICKS.slice(1)])));
+
+  assert.deepEqual(picks.map(({ id }) => id), [8, 7, 6, 5, 4, 3]);
+  assert.deepEqual(backups.map(({ id }) => id), [2, 1]);
+});
+
+test('drops invalid backups without retrying', async () => {
+  const claude = fakeClaude(reply([...SIX_PICKS, MADE_UP, PLACEHOLDER, SIX_PICKS[0]]));
+  const { picks, backups } = await shortlist(claude);
+
+  assert.equal(picks.length, 6);
+  assert.deepEqual(backups, []);
+  assert.equal(claude.requests.length, 1);
+});
+
+test('asks for fewer backups when candidates run short, and none with too few', async () => {
+  const seven = fakeClaude(reply(SIX_PICKS));
+  await shortlist(seven, { candidates: CANDIDATES.slice(0, 7) });
+  assert.deepEqual(seven.requests[0].output_config.format.schema.required, slotNames(7));
+  assert.match(seven.requests[0].system, /The last 1 are backups/);
+
+  const three = fakeClaude(reply([pick(1), pick(2), pick(3)]));
+  await shortlist(three, { candidates: CANDIDATES.slice(0, 3) });
+  assert.doesNotMatch(three.requests[0].system, /backups/);
+});
+
 test('drops a film that was not in the candidate list and keeps the rest', async () => {
   const claude = fakeClaude(reply([MADE_UP, ...SIX_PICKS.slice(1)]));
-  const picks = await shortlist(claude);
+  const { picks } = await shortlist(claude);
 
   assert.equal(picks.length, 5);
   assert.ok(picks.every(({ id }) => id !== 999));
@@ -107,21 +151,21 @@ test('drops a film that was not in the candidate list and keeps the rest', async
 });
 
 test('drops a repeated film and keeps its first appearance', async () => {
-  const picks = await shortlist(fakeClaude(reply([...SIX_PICKS.slice(0, 5), SIX_PICKS[0]])));
+  const { picks } = await shortlist(fakeClaude(reply([...SIX_PICKS.slice(0, 5), SIX_PICKS[0]])));
 
   assert.equal(picks.length, 5);
   assert.equal(picks.filter(({ id }) => id === 6).length, 1);
 });
 
 test('drops a placeholder reason', async () => {
-  const picks = await shortlist(fakeClaude(reply([PLACEHOLDER, ...SIX_PICKS.slice(0, 5)])));
+  const { picks } = await shortlist(fakeClaude(reply([PLACEHOLDER, ...SIX_PICKS.slice(0, 5)])));
 
   assert.deepEqual(picks.map(({ id }) => id), [6, 5, 4, 3, 2]);
 });
 
 test('drops a blank reason', async () => {
   const blank = { id: 12, why: '   ' };
-  const picks = await shortlist(fakeClaude(reply([blank, ...SIX_PICKS.slice(0, 5)])));
+  const { picks } = await shortlist(fakeClaude(reply([blank, ...SIX_PICKS.slice(0, 5)])));
 
   assert.deepEqual(picks.map(({ id }) => id), [6, 5, 4, 3, 2]);
 });
@@ -129,7 +173,7 @@ test('drops a blank reason', async () => {
 test('retries when fewer than five picks are valid', async () => {
   const bad = reply([MADE_UP, PLACEHOLDER, ...SIX_PICKS.slice(0, 4)]);
   const claude = fakeClaude([bad, reply(SIX_PICKS)]);
-  const picks = await shortlist(claude);
+  const { picks } = await shortlist(claude);
 
   assert.equal(claude.requests.length, 2);
   assert.equal(picks.length, 6);
@@ -137,7 +181,7 @@ test('retries when fewer than five picks are valid', async () => {
 
 test('accepts exactly five valid picks without retrying', async () => {
   const claude = fakeClaude(reply([MADE_UP, ...SIX_PICKS.slice(0, 5)]));
-  const picks = await shortlist(claude);
+  const { picks } = await shortlist(claude);
 
   assert.equal(claude.requests.length, 1);
   assert.equal(picks.length, 5);
@@ -154,7 +198,7 @@ test('with few candidates, asks for all of them and needs all of them', async ()
   const candidates = [film(1), film(2), film(3)];
   const good = fakeClaude(reply([pick(1), pick(2), pick(3)]));
 
-  assert.equal((await shortlist(good, { candidates })).length, 3);
+  assert.equal((await shortlist(good, { candidates })).picks.length, 3);
   assert.deepEqual(good.requests[0].output_config.format.schema.required, slotNames(3));
 
   const bad = fakeClaude(reply([pick(1), pick(2), MADE_UP]));
@@ -163,7 +207,7 @@ test('with few candidates, asks for all of them and needs all of them', async ()
 
 test('asks for one pick when there is one candidate', async () => {
   const claude = fakeClaude(reply([{ id: 1, why: 'The only option.' }]));
-  const picks = await shortlist(claude, { candidates: [film(1)] });
+  const { picks } = await shortlist(claude, { candidates: [film(1)] });
 
   assert.equal(picks.length, 1);
   assert.match(claude.requests[0].system, /pick the 1 /);
@@ -173,7 +217,7 @@ test('asks for one pick when there is one candidate', async () => {
 test('does not call Claude when there are no candidates', async () => {
   const claude = fakeClaude(reply([]));
 
-  assert.deepEqual(await shortlist(claude, { candidates: [] }), []);
+  assert.deepEqual(await shortlist(claude, { candidates: [] }), { picks: [], backups: [] });
   assert.equal(claude.requests.length, 0);
 });
 
@@ -186,7 +230,7 @@ test('a rejected key is not retried', async () => {
 });
 
 test('solo mode has no yours-or-mine label', async () => {
-  const [first] = await shortlist(fakeClaude(reply(SIX_PICKS)));
+  const { picks: [first] } = await shortlist(fakeClaude(reply(SIX_PICKS)));
 
   assert.equal(first.label, null);
 });
@@ -197,7 +241,7 @@ test('blend mode labels a pick by whose taste it came from', async () => {
     { type: 'recommended', person: 'Alex', because: 'Beta' },
   ];
   const candidates = [film(1), film(2, shared), film(3, [{ type: 'watchlist', person: 'Alex' }])];
-  const picks = await shortlist(fakeClaude(reply([pick(1), pick(2), pick(3)])), {
+  const { picks } = await shortlist(fakeClaude(reply([pick(1), pick(2), pick(3)])), {
     candidates,
     people: [SAM, ALEX],
   });
@@ -247,24 +291,27 @@ const QUIZ_VIEWER = {
 
 test('asks for the quiz number of picks when given a larger limit', async () => {
   const claude = fakeClaude(reply(QUIZ_RANKED));
-  const picks = await shortlist(claude, { maxPicks: QUIZ_PICKS });
+  const { picks } = await shortlist(claude, { maxPicks: QUIZ_PICKS });
 
   assert.equal(picks.length, QUIZ_PICKS);
-  assert.deepEqual(claude.requests[0].output_config.format.schema.required, slotNames(QUIZ_PICKS));
+  assert.deepEqual(
+    claude.requests[0].output_config.format.schema.required,
+    slotNames(QUIZ_PICKS + BACKUP_PICKS),
+  );
 });
 
 test('never asks for more picks than there are slots', async () => {
   const claude = fakeClaude(reply(QUIZ_RANKED));
   await shortlist(claude, { maxPicks: 50 });
 
-  assert.equal(claude.requests[0].output_config.format.schema.required.length, QUIZ_PICKS);
+  assert.equal(claude.requests[0].output_config.format.schema.required.length, QUIZ_PICKS + BACKUP_PICKS);
 });
 
 test('with a larger limit, still accepts five valid picks', async () => {
   const invalid = Array(QUIZ_PICKS - 5).fill(MADE_UP);
   const claude = fakeClaude(reply([...QUIZ_RANKED.slice(0, 5), ...invalid]));
 
-  assert.equal((await shortlist(claude, { maxPicks: QUIZ_PICKS })).length, 5);
+  assert.equal((await shortlist(claude, { maxPicks: QUIZ_PICKS })).picks.length, 5);
   assert.equal(claude.requests.length, 1);
 });
 
@@ -302,12 +349,12 @@ test('quiz answers start with a plan, and Letterboxd answers have none', async (
   const quiz = fakeClaude(reply(SIX_PICKS));
   await shortlist(quiz, { people: [QUIZ_VIEWER] });
   const quizSchema = quiz.requests[0].output_config.format.schema;
-  assert.deepEqual(quizSchema.required, ['plan', ...slotNames(6)]);
+  assert.deepEqual(quizSchema.required, ['plan', ...slotNames(9)]);
   assert.equal(Object.keys(quizSchema.properties)[0], 'plan');
   assert.match(quiz.requests[0].system, /First write "plan"/);
 
   const letterboxd = fakeClaude(reply(SIX_PICKS));
   await shortlist(letterboxd);
-  assert.deepEqual(letterboxd.requests[0].output_config.format.schema.required, slotNames(6));
+  assert.deepEqual(letterboxd.requests[0].output_config.format.schema.required, slotNames(9));
   assert.doesNotMatch(letterboxd.requests[0].system, /plan/);
 });

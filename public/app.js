@@ -65,6 +65,7 @@ let addingSecondPerson = false;
 let pendingRemoval = null;
 let lastChoices = null;
 let hasShortlist = false;
+let backupPicks = [];
 let toastTimer = null;
 let loadingTimer = null;
 let mode = 'letterboxd';
@@ -687,12 +688,19 @@ function renderPick(pick, index) {
     field(item, 'poster').hidden = false;
   }
 
+  // A turned-down film makes way for the next backup, until the backups run out.
   field(item, 'veto').addEventListener('click', () => {
+    const replacement = backupPicks.shift();
     captureEvent('shortlist_pick_vetoed', {
       shortlist_mode: mode,
       pick_position: index + 1,
+      replaced: Boolean(replacement),
     });
     item.hidden = true;
+    if (replacement) {
+      item.after(renderPick(replacement, index));
+      showToast(`Swapped in ${replacement.title}.`);
+    }
     updatePicksHeading();
     resultsHeading.focus({ preventScroll: true });
   });
@@ -711,7 +719,7 @@ function summarizeResults({ picks, candidateCount, stats }) {
     : `Checked ${stats.checked} films and none are on your services. Try adding another service.`;
 }
 
-function showResults({ picks, candidateCount, stats }) {
+function showResults({ picks, backups, candidateCount, stats }) {
   captureEvent('shortlist_generated', {
     shortlist_mode: mode,
     people_count: mode === 'quiz' ? quizAnswers.length : filledCount(),
@@ -719,6 +727,7 @@ function showResults({ picks, candidateCount, stats }) {
     candidate_count: candidateCount,
   });
   resultsSummary.textContent = summarizeResults({ picks, candidateCount, stats });
+  backupPicks = [...backups];
   resultsList.replaceChildren(...picks.map(renderPick));
   updatePicksHeading();
   if (picks.length === 0) resultsHeading.textContent = 'Nothing to pick from tonight';

@@ -2,6 +2,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 
 const MAX_PICKS = 6;
 const QUIZ_PICKS = 8;
+// Extra picks kept back, so a film turned down with "Not tonight" can be swapped out.
+const BACKUP_PICKS = 3;
 // At medium, Claude sometimes skipped its reasoning and returned placeholder picks.
 const EFFORT = 'high';
 // Quiz picks have no ratings to go on, and at high effort Claude often stopped
@@ -9,7 +11,7 @@ const EFFORT = 'high';
 const QUIZ_EFFORT = 'xhigh';
 const MIN_PICKS = 5;
 const MIN_DISCOVERY_PICKS = 2;
-const PICK_SLOTS = Array.from({ length: QUIZ_PICKS }, (_, index) => `pick${index + 1}`);
+const PICK_SLOTS = Array.from({ length: QUIZ_PICKS + BACKUP_PICKS }, (_, index) => `pick${index + 1}`);
 const MAX_ATTEMPTS = 2;
 const MAX_LOGGED_ANSWER_LENGTH = 4000;
 const TOP_RATED_PER_PERSON = 30;
@@ -58,7 +60,7 @@ function picksSchema(count, fromQuiz) {
 }
 
 // Quiz viewers have no history, so their picks are tied to what they said they're into.
-function systemPrompt(count, fromQuiz) {
+function systemPrompt(count, backups, fromQuiz) {
   const tasteRules = fromQuiz
     ? [
       `First write "plan": the ids of all ${count} films you chose, in order. Then fill every pick from that plan.`,
@@ -71,6 +73,9 @@ function systemPrompt(count, fromQuiz) {
 
   return [
     `You choose what people watch tonight. From the candidate films, pick the ${count} that best fit these viewers' taste and tonight's mood, best first.`,
+    ...(backups > 0
+      ? [`The last ${backups} are backups, shown only if the viewers turn down an earlier pick, so rank them below the others.`]
+      : []),
     'Use only ids from the candidates list, and never repeat a film.',
     'With two viewers, favor films both are likely to enjoy.',
     ...tasteRules,
@@ -150,7 +155,8 @@ function isRealReason(why) {
 
 // Claude only chooses from what it was given, so any other film is dropped.
 // A couple of bad picks still leaves a full list, but too few means a bad answer.
-function checkPicks(picks, candidates, count) {
+// Valid backups move up to fill the gaps, and whatever is left over stays a backup.
+function checkPicks(picks, candidates, shown) {
   const candidatesById = new Map(candidates.map((film) => [film.id, film]));
   const seen = new Set();
 
@@ -162,17 +168,18 @@ function checkPicks(picks, candidates, count) {
     return true;
   });
 
-  if (validPicks.length < Math.min(MIN_PICKS, count)) {
+  if (validPicks.length < Math.min(MIN_PICKS, shown)) {
     throw new Error('Claude returned an invalid shortlist. Try again.');
   }
-  if (validPicks.length < count) {
-    console.error(`Dropped ${count - validPicks.length} invalid picks from a shortlist.`);
+  if (validPicks.length < picks.length) {
+    console.error(`Dropped ${picks.length - validPicks.length} invalid picks from a shortlist.`);
   }
 
-  return validPicks.map(({ id, why }) => ({ film: candidatesById.get(id), why: why.trim() }));
+  const checked = validPicks.map(({ id, why }) => ({ film: candidatesById.get(id), why: why.trim() }));
+  return { picks: checked.slice(0, shown), backups: checked.slice(shown) };
 }
 
-async function askClaude({ claude, model, count, content, fromQuiz, effort }) {
+async function askClaude({ claude, model, count, backups, content, fromQuiz, effort }) {
   try {
     return await claude.beta.messages.create({
       model,
@@ -183,7 +190,7 @@ async function askClaude({ claude, model, count, content, fromQuiz, effort }) {
         effort,
         format: { type: 'json_schema', schema: picksSchema(count, fromQuiz) },
       },
-      system: systemPrompt(count, fromQuiz),
+      system: systemPrompt(count, backups, fromQuiz),
       messages: [{ role: 'user', content }],
     });
   } catch (error) {
@@ -217,22 +224,22 @@ async function buildShortlist({
   maxPicks = MAX_PICKS,
   effort = EFFORT,
 }) {
-  if (candidates.length === 0) return [];
+  if (candidates.length === 0) return { picks: [], backups: [] };
 
-  const count = Math.min(maxPicks, PICK_SLOTS.length, candidates.length);
+  const shown = Math.min(maxPicks, QUIZ_PICKS, candidates.length);
+  const count = Math.min(shown + BACKUP_PICKS, candidates.length);
+  const backups = count - shown;
   const fromQuiz = people.some((person) => person.interests);
   const content = describeRequest({ candidates, people, mood, count });
   let lastError;
 
   // A bad answer usually comes right on a second try. API failures are not retried here.
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const response = await askClaude({ claude, model, count, content, fromQuiz, effort });
+    const response = await askClaude({ claude, model, count, backups, content, fromQuiz, effort });
     try {
-      return checkPicks(readPicks(response, count), candidates, count).map(({ film, why }) => ({
-        ...film,
-        why,
-        label: labelFor(film, people),
-      }));
+      const checked = checkPicks(readPicks(response, count), candidates, shown);
+      const withDetails = ({ film, why }) => ({ ...film, why, label: labelFor(film, people) });
+      return { picks: checked.picks.map(withDetails), backups: checked.backups.map(withDetails) };
     } catch (error) {
       logRejectedAnswer(response, error, attempt);
       lastError = error;
@@ -242,4 +249,4 @@ async function buildShortlist({
   throw lastError;
 }
 
-module.exports = { buildShortlist, MOODS, MAX_PICKS, QUIZ_PICKS, QUIZ_EFFORT, MIN_PICKS };
+module.exports = { buildShortlist, MOODS, MAX_PICKS, QUIZ_PICKS, BACKUP_PICKS, QUIZ_EFFORT, MIN_PICKS };
