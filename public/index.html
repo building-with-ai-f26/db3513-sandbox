@@ -29,20 +29,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>The Shortlist</title>
+  <link rel="preload" href="fonts/archivo-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="container" id="container">
-    <h1>The Shortlist</h1>
-    <p class="tagline">Movies picked for you, wherever you can watch them.</p>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="brand">
+        <h1 class="wordmark">The Shortlist</h1>
+        <p class="tagline">Movies picked for you, wherever you can watch them.</p>
+      </div>
+      <nav aria-label="Progress">
+        <ol class="steps">
+          <li><button type="button" class="step" data-step-link="you"><span class="step-number">1</span>You</button></li>
+          <li><button type="button" class="step" data-step-link="tonight"><span class="step-number">2</span>Preferences</button></li>
+          <li><button type="button" class="step" data-step-link="shortlist"><span class="step-number">3</span>Shortlist</button></li>
+        </ol>
+      </nav>
+    </div>
+  </header>
 
-    <nav aria-label="Progress">
-      <ol class="steps">
-        <li><button type="button" class="step" data-step-link="you"><span class="step-number">1</span>You</button></li>
-        <li><button type="button" class="step" data-step-link="tonight"><span class="step-number">2</span>Preferences</button></li>
-        <li><button type="button" class="step" data-step-link="shortlist"><span class="step-number">3</span>Shortlist</button></li>
-      </ol>
-    </nav>
+  <main class="container" id="container">
 
     <section data-step="you" hidden>
       <h2 class="step-heading" tabindex="-1">Who's watching?</h2>
@@ -86,13 +93,18 @@
     </section>
 
     <section data-step="shortlist" hidden>
-      <div id="loading" hidden>
-        <h2 class="step-heading" tabindex="-1">Building your shortlist</h2>
-        <p class="more" id="loading-status" role="status"></p>
+      <div id="loading" class="program" hidden>
+        <div class="program-side">
+          <h2 class="step-heading" tabindex="-1">Building your shortlist</h2>
+          <p class="more" id="loading-status" role="status"></p>
+        </div>
         <ol class="picks" aria-hidden="true">
-          <li class="pick skeleton"></li>
-          <li class="pick skeleton"></li>
-          <li class="pick skeleton"></li>
+          <li class="pick skeleton-pick"><span class="sk sk-number"></span><span class="sk sk-poster"></span><span class="sk-lines"><span class="sk sk-title"></span><span class="sk"></span><span class="sk"></span><span class="sk sk-short"></span></span></li>
+          <li class="pick skeleton-pick"><span class="sk sk-number"></span><span class="sk sk-poster"></span><span class="sk-lines"><span class="sk sk-title"></span><span class="sk"></span><span class="sk"></span><span class="sk sk-short"></span></span></li>
+          <li class="pick skeleton-pick"><span class="sk sk-number"></span><span class="sk sk-poster"></span><span class="sk-lines"><span class="sk sk-title"></span><span class="sk"></span><span class="sk"></span><span class="sk sk-short"></span></span></li>
+          <li class="pick skeleton-pick"><span class="sk sk-number"></span><span class="sk sk-poster"></span><span class="sk-lines"><span class="sk sk-title"></span><span class="sk"></span><span class="sk"></span><span class="sk sk-short"></span></span></li>
+          <li class="pick skeleton-pick"><span class="sk sk-number"></span><span class="sk sk-poster"></span><span class="sk-lines"><span class="sk sk-title"></span><span class="sk"></span><span class="sk"></span><span class="sk sk-short"></span></span></li>
+          <li class="pick skeleton-pick"><span class="sk sk-number"></span><span class="sk sk-poster"></span><span class="sk-lines"><span class="sk sk-title"></span><span class="sk"></span><span class="sk"></span><span class="sk sk-short"></span></span></li>
         </ol>
       </div>
 
@@ -105,14 +117,17 @@
         </div>
       </div>
 
-      <div id="results" hidden>
-        <h2 class="step-heading" id="results-heading" tabindex="-1"></h2>
-        <p class="more" id="results-summary"></p>
-        <ol class="picks" id="results-list"></ol>
-        <div class="actions">
-          <button type="button" class="secondary" id="restore-picks" hidden></button>
-          <button type="button" class="secondary" data-go-to="tonight">Change mood</button>
+      <div id="results" class="program" hidden>
+        <div class="program-side">
+          <h2 class="step-heading" id="results-heading" tabindex="-1"></h2>
+          <p class="results-context" id="results-context"></p>
+          <p class="more" id="results-summary"></p>
+          <div class="actions">
+            <button type="button" class="secondary" id="restore-picks" hidden></button>
+            <button type="button" class="secondary" data-go-to="tonight">Change mood</button>
+          </div>
         </div>
+        <ol class="picks" id="results-list"></ol>
         <p class="attribution">
           Streaming availability from <a href="https://www.justwatch.com/" rel="noopener">JustWatch</a>,
           via TMDB, and it may not be real-time.
@@ -239,19 +254,28 @@
 
   <template id="pick-template">
     <li class="pick">
-      <img class="pick-poster" data-field="poster" alt="" hidden />
+      <span class="pick-number" aria-hidden="true"></span>
+      <div class="pick-poster-frame">
+        <img class="pick-poster" data-field="poster" alt="" hidden />
+        <span class="pick-poster-fallback" data-field="poster-fallback" hidden></span>
+      </div>
       <div class="pick-details">
-        <p class="pick-label" data-field="label" hidden></p>
         <h3 class="pick-title" data-field="title"></h3>
-        <p class="film-note" data-field="facts"></p>
+        <p class="pick-meta">
+          <span class="pick-label" data-field="label" hidden></span>
+          <span class="pick-new" data-field="new" hidden>New pick</span>
+        </p>
         <p class="pick-why" data-field="why"></p>
-        <details class="help">
-          <summary>More about this film</summary>
-          <p class="film-note" data-field="genres"></p>
-          <p class="more" data-field="overview"></p>
-          <ul class="watch-options" data-field="watch" hidden></ul>
-        </details>
-        <button type="button" class="quiet veto" data-field="veto">Not tonight</button>
+        <p class="pick-overview" data-field="overview"></p>
+        <button type="button" class="quiet read-more" data-field="read-more" aria-expanded="false" hidden>Read more</button>
+        <p class="film-note pick-facts" data-field="facts"></p>
+        <div class="pick-actions">
+          <button type="button" class="veto" data-field="veto">Not tonight</button>
+          <details class="help" data-field="watch-details" hidden>
+            <summary>Where to watch</summary>
+            <ul class="watch-options" data-field="watch"></ul>
+          </details>
+        </div>
       </div>
     </li>
   </template>
