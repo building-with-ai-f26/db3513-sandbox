@@ -9,6 +9,8 @@ const { parseNetflixHistory } = require('./netflix');
 const {
   loadProfiles,
   saveProfiles,
+  loadAccountSetup,
+  saveAccountSetup,
   deleteExpiredSessions,
   deleteExpiredAccountSessions,
   saveShortlist,
@@ -24,7 +26,7 @@ const { withSession, SESSION_LIFETIME_MS } = require('./sessions');
 const { createTmdbClient } = require('./tmdb');
 const { buildCandidates, SERVICES, REGIONS } = require('./candidates');
 const { buildShortlist, MOODS, QUIZ_PICKS, QUIZ_EFFORT } = require('./shortlist');
-const { readAnswers, describeViewer, buildQuizCandidates, GENRES, ERAS } = require('./quiz');
+const { readAnswers, readStoredQuiz, describeViewer, buildQuizCandidates, GENRES, ERAS } = require('./quiz');
 const { createPostHogLogger } = require('./posthog-logs');
 
 const PORT = process.env.PORT || 3000;
@@ -88,7 +90,13 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-if (IS_PUBLIC) app.use(['/api/profiles', '/api/shortlist'], withSession);
+if (IS_PUBLIC) app.use(['/api/profiles', '/api/shortlist', '/api/setup'], withSession);
+app.use(['/api/profiles', '/api/shortlist', '/api/setup'], readAccount);
+
+// Signed in, the setup belongs to the account; signed out, to this browser.
+function profileOwner(req) {
+  return req.user ? { userId: req.user.id } : { sessionId: req.sessionId };
+}
 
 // One counter for the whole app, which caps the load no matter who is sending.
 function limitRequests(maxRequests, windowMs) {
@@ -125,7 +133,7 @@ function requireAccount(req, res, next) {
     next();
     return;
   }
-  res.status(401).json({ error: 'Sign in to see your saved shortlists.' });
+  res.status(401).json({ error: 'Sign in to use your account.' });
 }
 
 function moodName(id) {
@@ -211,8 +219,51 @@ function parseSlot(req, res) {
   return null;
 }
 
-app.get('/api/profiles', (req, res) => {
-  res.json({ profiles: summarizeAll(loadProfiles(req.sessionId)) });
+// Quiz answers live in the browser when signed out; signed in, they're kept with the account.
+app.get('/api/setup/quiz', requireAccount, async (req, res) => {
+  res.json({ quiz: (await loadAccountSetup(req.user.id))?.quiz ?? null });
+});
+
+app.put('/api/setup/quiz', requireAccount, express.json(), async (req, res) => {
+  let quiz;
+  try {
+    quiz = readStoredQuiz(req.body?.quiz);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+  await saveAccountSetup(req.user.id, { quiz });
+  res.json({ quiz });
+});
+
+function isEmptySetup(setup) {
+  return !setup || (!setup.profiles.some(Boolean) && !setup.quiz);
+}
+
+// Right after signing in: an account with no setup yet takes this browser's.
+// An account that already has one keeps it, so nothing is overwritten.
+app.post('/api/setup/adopt', requireAccount, express.json(), async (req, res) => {
+  if (!isEmptySetup(await loadAccountSetup(req.user.id))) {
+    res.json({ adopted: false });
+    return;
+  }
+  let quiz = null;
+  try {
+    if (req.body?.quiz) quiz = readStoredQuiz(req.body.quiz);
+  } catch (error) {
+    // Unusable answers are left behind rather than blocking the profiles from moving.
+  }
+  const profiles = await loadProfiles({ sessionId: req.sessionId });
+  if (!profiles.some(Boolean) && !quiz) {
+    res.json({ adopted: false });
+    return;
+  }
+  await saveAccountSetup(req.user.id, { profiles, quiz });
+  res.json({ adopted: true });
+});
+
+app.get('/api/profiles', async (req, res) => {
+  res.json({ profiles: summarizeAll(await loadProfiles(profileOwner(req))) });
 });
 
 app.post('/api/profiles/:slot', limitUploads, upload.array('files'), async (req, res) => {
@@ -265,17 +316,17 @@ app.post('/api/profiles/:slot', limitUploads, upload.array('files'), async (req,
     return;
   }
 
-  const profiles = loadProfiles(req.sessionId);
+  const profiles = await loadProfiles(profileOwner(req));
   profiles[slot] = profile;
-  saveProfiles(profiles, req.sessionId);
+  await saveProfiles(profiles, profileOwner(req));
   res.json({ profiles: summarizeAll(profiles) });
 });
 
-app.post('/api/profiles/:slot/netflix', limitUploads, upload.single('file'), (req, res) => {
+app.post('/api/profiles/:slot/netflix', limitUploads, upload.single('file'), async (req, res) => {
   const slot = parseSlot(req, res);
   if (slot === null) return;
 
-  const profiles = loadProfiles(req.sessionId);
+  const profiles = await loadProfiles(profileOwner(req));
   if (!profiles[slot]) {
     res.status(404).json({ error: 'Add this person first.' });
     return;
@@ -292,7 +343,7 @@ app.post('/api/profiles/:slot/netflix', limitUploads, upload.single('file'), (re
     return;
   }
 
-  saveProfiles(profiles, req.sessionId);
+  await saveProfiles(profiles, profileOwner(req));
   res.json({ profiles: summarizeAll(profiles) });
 });
 
@@ -301,7 +352,7 @@ app.post('/api/profiles/:slot/letterboxd', limitUploads, express.json(), async (
   const slot = parseSlot(req, res);
   if (slot === null) return;
 
-  const profiles = loadProfiles(req.sessionId);
+  const profiles = await loadProfiles(profileOwner(req));
   if (!profiles[slot]) {
     res.status(404).json({ error: 'Add this person first.' });
     return;
@@ -322,7 +373,7 @@ app.post('/api/profiles/:slot/letterboxd', limitUploads, express.json(), async (
     letterboxdUsername: username,
     diarySyncedAt: new Date().toISOString(),
   };
-  saveProfiles(profiles, req.sessionId);
+  await saveProfiles(profiles, profileOwner(req));
   res.json({ profiles: summarizeAll(profiles) });
 });
 
@@ -339,13 +390,13 @@ async function refreshDiaries(profiles) {
   }));
 }
 
-app.delete('/api/profiles/:slot', (req, res) => {
+app.delete('/api/profiles/:slot', async (req, res) => {
   const slot = parseSlot(req, res);
   if (slot === null) return;
 
-  const profiles = loadProfiles(req.sessionId);
+  const profiles = await loadProfiles(profileOwner(req));
   profiles[slot] = null;
-  saveProfiles(profiles, req.sessionId);
+  await saveProfiles(profiles, profileOwner(req));
   res.json({ profiles: summarizeAll(profiles) });
 });
 
@@ -361,7 +412,7 @@ app.get('/api/options', (req, res) => {
 
 app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), async (req, res) => {
   const { services: serviceIds, region, mood } = req.body ?? {};
-  let profiles = loadProfiles(req.sessionId);
+  let profiles = await loadProfiles(profileOwner(req));
 
   if (!profiles.some(Boolean)) {
     res.status(400).json({ error: 'Add a person first.' });
@@ -389,7 +440,7 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
   }
 
   profiles = await refreshDiaries(profiles);
-  saveProfiles(profiles, req.sessionId);
+  await saveProfiles(profiles, profileOwner(req));
 
   const tmdb = app.locals.createTmdb();
   try {

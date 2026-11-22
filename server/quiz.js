@@ -104,6 +104,30 @@ function readAnswers(body) {
   return { people: people.map(readPerson), mood, region };
 }
 
+// Answers saved to an account can be half-filled (a blank name, no genres yet),
+// so this checks only types and sizes, not that they are ready to build a shortlist.
+function readStoredQuiz(value) {
+  const isGenreList = (ids) => Array.isArray(ids) && ids.every((id) => GENRES.some((genre) => genre.id === id));
+  const valid =
+    Array.isArray(value) &&
+    value.length > 0 &&
+    value.length <= MAX_PEOPLE &&
+    value.every(
+      (person) =>
+        person &&
+        typeof person.name === 'string' &&
+        person.name.length <= MAX_NAME_LENGTH &&
+        isGenreList(person.genres) &&
+        isGenreList(person.avoid) &&
+        Array.isArray(person.favorites) &&
+        person.favorites.length <= MAX_FAVORITES &&
+        person.favorites.every((title) => typeof title === 'string' && title.length <= MAX_FAVORITE_LENGTH) &&
+        ERAS.some(({ id }) => id === person.era),
+    );
+  if (!valid) throw new Error("Those quiz answers couldn't be saved.");
+  return value.map(({ name, genres, avoid, favorites, era }) => ({ name, genres, avoid, favorites, era }));
+}
+
 // What Claude sees about each viewer in place of their rating history.
 function describeViewer(person) {
   return {
@@ -218,6 +242,7 @@ async function buildQuizCandidates({ people, region, tmdb }) {
 
 module.exports = {
   readAnswers,
+  readStoredQuiz,
   describeViewer,
   buildQuizCandidates,
   eraYears,

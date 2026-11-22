@@ -99,15 +99,15 @@ test('a forged session ID is replaced and cannot reach other files', async () =>
   assert.deepEqual((await response.json()).profiles, [null, null]);
 });
 
-test('sessions past their lifetime are deleted and recent ones are kept', () => {
+test('sessions past their lifetime are deleted and recent ones are kept', async () => {
   const lifetime = 1000;
-  saveProfiles(['recent', null], 'a'.repeat(64));
+  await saveProfiles(['recent', null], { sessionId: 'a'.repeat(64) });
 
   deleteExpiredSessions(lifetime);
-  assert.deepEqual(loadProfiles('a'.repeat(64)), ['recent', null]);
+  assert.deepEqual(await loadProfiles({ sessionId: 'a'.repeat(64) }), ['recent', null]);
 
   deleteExpiredSessions(lifetime, Date.now() + lifetime + 1000);
-  assert.deepEqual(loadProfiles('a'.repeat(64)), [null, null]);
+  assert.deepEqual(await loadProfiles({ sessionId: 'a'.repeat(64) }), [null, null]);
 });
 
 test('searches over the limit are turned away', async () => {
