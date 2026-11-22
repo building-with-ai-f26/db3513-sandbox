@@ -855,6 +855,65 @@ button.veto:hover:not(:disabled) { background: var(--ink); color: var(--paper); 
   font-size: 0.75rem;
 }
 
+/* Account: a quiet control in the masthead, and a native dialog to sign in */
+.account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 0.875rem;
+}
+
+.account-email {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account button.quiet { color: var(--ink); font-size: 0.875rem; font-weight: 650; }
+
+.account-dialog {
+  width: min(100% - 32px, 420px);
+  max-height: calc(100% - 32px);
+  padding: 20px 24px 24px;
+  background: var(--paper);
+  border: none;
+  border-top: 2px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  color: var(--ink);
+}
+
+.account-dialog::backdrop { background: rgb(18 18 23 / 0.55); }
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 2rem;
+  font-stretch: 68%;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.account-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 16px;
+}
+
+.account-switch button.quiet { min-height: 32px; padding: 4px 0; color: var(--ink); font-weight: 650; }
+
 /* Toast */
 .toast {
   position: fixed;
@@ -879,7 +938,14 @@ button.veto:hover:not(:disabled) { background: var(--ink); color: var(--paper); 
 
 .toast button.quiet:hover:not(:disabled) { color: var(--paper); opacity: 0.8; }
 
+/* Narrow screens: wordmark and account share the top row, the steps go below. */
+@media (max-width: 759px) {
+  .brand { flex: 1 1 0; min-width: 0; }
+  .masthead nav { order: 3; width: 100%; }
+}
+
 @media (max-width: 420px) {
+  .account-email { display: none; }
   .masthead-inner { padding: 12px 16px; }
   .steps { width: 100%; justify-content: space-between; }
   .step { padding: 8px 4px; gap: 6px; font-size: 0.8125rem; }

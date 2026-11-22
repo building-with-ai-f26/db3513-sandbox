@@ -46,8 +46,37 @@
           <li><button type="button" class="step" data-step-link="shortlist"><span class="step-number">3</span>Shortlist</button></li>
         </ol>
       </nav>
+      <div class="account">
+        <span class="account-email" id="account-email" hidden></span>
+        <button type="button" class="quiet" id="sign-in">Sign in</button>
+        <button type="button" class="quiet" id="sign-out" hidden>Sign out</button>
+      </div>
     </div>
   </header>
+
+  <dialog class="account-dialog" id="account-dialog" aria-labelledby="account-title">
+    <form id="account-form" novalidate>
+      <div class="dialog-header">
+        <h2 class="dialog-title" id="account-title">Sign in</h2>
+        <button type="button" class="quiet" id="account-close">Close</button>
+      </div>
+      <label>
+        Email
+        <input type="email" name="email" maxlength="254" autocomplete="email" spellcheck="false" required autofocus />
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" minlength="8" maxlength="200" autocomplete="current-password" required />
+        <span class="field-note" id="password-note" hidden>At least 8 characters.</span>
+      </label>
+      <p class="error" role="alert" id="account-error" hidden></p>
+      <button type="submit" class="primary-action" id="account-submit">Sign in</button>
+      <p class="more account-switch">
+        <span id="account-switch-text">New here?</span>
+        <button type="button" class="quiet" id="account-switch">Create an account</button>
+      </p>
+    </form>
+  </dialog>
 
   <main class="container" id="container">
 
