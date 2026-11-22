@@ -21,6 +21,12 @@ const SCHEMA = `
     details JSONB NOT NULL
   );
   CREATE INDEX IF NOT EXISTS shortlists_by_user ON shortlists (user_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS account_setups (
+    user_id TEXT PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
+    profiles JSONB NOT NULL DEFAULT '[null, null]',
+    quiz JSONB,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
 `;
 
 let pool = null;

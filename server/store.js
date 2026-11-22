@@ -8,6 +8,11 @@ const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
 const TMDB_CACHE_FILE = path.join(DATA_DIR, 'tmdb-cache.json');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 const SHORTLISTS_FILE = path.join(DATA_DIR, 'shortlists.json');
+const ACCOUNT_SETUPS_FILE = path.join(DATA_DIR, 'account-setups.json');
+// A fresh array each time: callers fill slots in place, so a shared one would leak between people.
+function emptyProfiles() {
+  return [null, null];
+}
 // Older shortlists drop off past this, so one account can't grow without limit.
 const MAX_SAVED_SHORTLISTS = 50;
 const UNIQUE_VIOLATION = '23505';
@@ -31,13 +36,48 @@ function profilesFile(sessionId) {
   return sessionId ? path.join(SESSIONS_DIR, `${sessionId}.json`) : PROFILES_FILE;
 }
 
-// Always two slots: one filled is solo mode, two filled is blend mode.
-function loadProfiles(sessionId) {
-  return readJson(profilesFile(sessionId), [null, null]);
+// A signed-in person's setup belongs to their account, so it follows them across devices.
+// Postgres when DATABASE_URL is set, otherwise one JSON file keyed by user id.
+async function loadAccountSetup(userId) {
+  const db = getPool();
+  if (db) {
+    const { rows } = await db.query('SELECT profiles, quiz FROM account_setups WHERE user_id = $1', [userId]);
+    return rows[0] ?? null;
+  }
+  return readJson(ACCOUNT_SETUPS_FILE, {})[userId] ?? null;
 }
 
-function saveProfiles(profiles, sessionId) {
-  writeJson(profilesFile(sessionId), profiles);
+// Changes only the fields given, so saving profiles never touches quiz answers and the other way round.
+async function saveAccountSetup(userId, changes) {
+  const db = getPool();
+  if (db) {
+    const current = (await loadAccountSetup(userId)) ?? { profiles: emptyProfiles(), quiz: null };
+    const next = { ...current, ...changes };
+    await db.query(
+      `INSERT INTO account_setups (user_id, profiles, quiz, updated_at) VALUES ($1, $2, $3, now())
+        ON CONFLICT (user_id) DO UPDATE SET profiles = $2, quiz = $3, updated_at = now()`,
+      [userId, JSON.stringify(next.profiles), next.quiz === null ? null : JSON.stringify(next.quiz)],
+    );
+    return;
+  }
+  const setups = readJson(ACCOUNT_SETUPS_FILE, {});
+  setups[userId] = { profiles: emptyProfiles(), quiz: null, ...setups[userId], ...changes };
+  writeJson(ACCOUNT_SETUPS_FILE, setups);
+}
+
+// The owner is { userId } when signed in, or { sessionId } (undefined locally) when not.
+// Always two slots: one filled is solo mode, two filled is blend mode.
+async function loadProfiles(owner) {
+  if (owner.userId) return (await loadAccountSetup(owner.userId))?.profiles ?? emptyProfiles();
+  return readJson(profilesFile(owner.sessionId), emptyProfiles());
+}
+
+async function saveProfiles(profiles, owner) {
+  if (owner.userId) {
+    await saveAccountSetup(owner.userId, { profiles });
+    return;
+  }
+  writeJson(profilesFile(owner.sessionId), profiles);
 }
 
 function deleteExpiredSessions(lifetimeMs, now = Date.now()) {
@@ -262,6 +302,8 @@ module.exports = {
   deleteExpiredAccountSessions,
   loadProfiles,
   saveProfiles,
+  loadAccountSetup,
+  saveAccountSetup,
   deleteExpiredSessions,
   loadTmdbCache,
   saveTmdbCache,

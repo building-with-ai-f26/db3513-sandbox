@@ -7,6 +7,7 @@ const MAX_QUIZ_PEOPLE = 2;
 const MAX_SERVICES_SHOWN = 2;
 const MAX_GENRES_SHOWN = 2;
 const UNDO_WINDOW_MS = 6000;
+const QUIZ_SAVE_DELAY_MS = 800;
 const LOADING_MESSAGE_MS = 3000;
 const LOADING_MESSAGES = [
   'Checking what is on your services…',
@@ -96,6 +97,7 @@ let pendingDelete = null;
 // The shortlist on screen, kept so it can be saved if the person chooses to.
 let currentResult = null;
 let saveAfterSignIn = false;
+let quizSaveTimer = null;
 let toastTimer = null;
 let loadingTimer = null;
 let mode = 'letterboxd';
@@ -572,7 +574,7 @@ function renderQuizPerson(answers, index) {
       form.querySelector(`[name="${other}"][value="${event.target.value}"]`).checked = false;
     }
     quizAnswers[index] = readQuizForm(form);
-    writeStored(QUIZ_STORAGE_KEY, quizAnswers);
+    storeQuiz();
     updateQuizReady();
   });
 
@@ -580,7 +582,7 @@ function renderQuizPerson(answers, index) {
     field(section, 'remove').hidden = false;
     field(section, 'remove').addEventListener('click', () => {
       quizAnswers.splice(index, 1);
-      writeStored(QUIZ_STORAGE_KEY, quizAnswers);
+      storeQuiz();
       renderQuizPeople();
     });
   }
@@ -591,7 +593,7 @@ function renderQuizInvite() {
   const section = cloneTemplate('invite-template');
   field(section, 'add').addEventListener('click', () => {
     quizAnswers.push(blankQuizPerson());
-    writeStored(QUIZ_STORAGE_KEY, quizAnswers);
+    storeQuiz();
     renderQuizPeople();
   });
   return section;
@@ -604,10 +606,70 @@ function renderQuizPeople() {
   updateQuizReady();
 }
 
-function loadSavedQuiz() {
-  const saved = readStored(QUIZ_STORAGE_KEY);
+function quizFrom(saved) {
   const valid = Array.isArray(saved) && saved.length > 0 && saved.length <= MAX_QUIZ_PEOPLE;
   return valid ? saved.map((person) => ({ ...blankQuizPerson(), ...person })) : [blankQuizPerson()];
+}
+
+function loadSavedQuiz() {
+  return quizFrom(readStored(QUIZ_STORAGE_KEY));
+}
+
+function hasQuizAnswers(answers) {
+  return answers.some((person) => person.name.trim() || person.genres.length > 0);
+}
+
+// Signed in, answers are kept with the account; signed out, in this browser only.
+async function loadQuiz() {
+  if (!account) return loadSavedQuiz();
+  return quizFrom((await api('/api/setup/quiz')).quiz);
+}
+
+async function sendQuiz() {
+  clearTimeout(quizSaveTimer);
+  quizSaveTimer = null;
+  try {
+    await api('/api/setup/quiz', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quiz: quizAnswers }),
+    });
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+// Typing changes the answers on every key, so the account copy is saved once typing pauses.
+function storeQuiz() {
+  if (!account) {
+    writeStored(QUIZ_STORAGE_KEY, quizAnswers);
+    return;
+  }
+  clearTimeout(quizSaveTimer);
+  quizSaveTimer = setTimeout(sendQuiz, QUIZ_SAVE_DELAY_MS);
+}
+
+// Shows whichever setup now applies: the account's when signed in, this browser's when not.
+async function refreshSetup() {
+  profiles = (await api('/api/profiles')).profiles;
+  quizAnswers = await loadQuiz();
+  setMode(mode);
+  if (currentStep() === 'tonight' && !canVisit('tonight')) showStep('you');
+  else updateSteps(currentStep());
+}
+
+// The first sign-in carries this browser's setup over; after that the account's own is used.
+// Returns a sentence for the sign-in toast, or an empty string.
+async function adoptSetup() {
+  const browserQuiz = loadSavedQuiz();
+  const { adopted } = await api('/api/setup/adopt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quiz: hasQuizAnswers(browserQuiz) ? browserQuiz : null }),
+  });
+  await refreshSetup();
+  if (adopted) return 'Your setup is now saved to your account.';
+  return profiles.some(Boolean) || hasQuizAnswers(quizAnswers) ? 'Loaded your setup from your account.' : '';
 }
 
 function quizRequest(choices) {
@@ -1094,6 +1156,14 @@ function setUpNavigation() {
   window.addEventListener('pagehide', () => {
     if (pendingRemoval) fetch(`/api/profiles/${pendingRemoval.slot}`, { method: 'DELETE', keepalive: true });
     if (pendingDelete) fetch(`/api/shortlists/${pendingDelete.id}`, { method: 'DELETE', keepalive: true });
+    if (quizSaveTimer) {
+      fetch('/api/setup/quiz', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quiz: quizAnswers }),
+        keepalive: true,
+      });
+    }
   });
 }
 
@@ -1146,7 +1216,14 @@ async function submitAccount(event) {
     renderAccount();
     accountDialog.close();
     captureEvent(isSignup ? 'account_created' : 'account_signed_in', {});
-    showToast(isSignup ? `Account created for ${account.email}.` : `Signed in as ${account.email}.`);
+    let setupNote = '';
+    try {
+      setupNote = await adoptSetup();
+    } catch (error) {
+      setupNote = "Your setup couldn't be loaded. Refresh the page to try again.";
+    }
+    const greeting = isSignup ? `Account created for ${account.email}.` : `Signed in as ${account.email}.`;
+    showToast([greeting, setupNote].filter(Boolean).join(' '));
     if (saveAfterSignIn) {
       saveAfterSignIn = false;
       startSave();
@@ -1161,9 +1238,12 @@ async function submitAccount(event) {
 
 async function signOut() {
   try {
+    // An answer typed just before signing out still reaches the account.
+    if (quizSaveTimer) await sendQuiz();
     await api('/api/account/logout', { method: 'POST' });
     account = null;
     renderAccount();
+    await refreshSetup();
     // Saved lists belong to the account, so they leave the screen with it.
     if (currentStep() === 'history' || !backToSaved.hidden) showStep('you');
     saveButton.disabled = false;
@@ -1195,7 +1275,7 @@ function setUpAccount() {
   accountSwitch.addEventListener('click', () => setAccountMode(accountMode === 'login' ? 'signup' : 'login'));
   document.getElementById('account-close').addEventListener('click', () => accountDialog.close());
   // Signing in is optional, so a failed check just leaves the page signed out.
-  api('/api/account')
+  return api('/api/account')
     .then((body) => {
       account = body.user;
       renderAccount();
@@ -1205,16 +1285,17 @@ function setUpAccount() {
 
 async function start() {
   setUpNavigation();
-  setUpAccount();
+  const accountChecked = setUpAccount();
   try {
     await setUpFinder();
     profiles = (await api('/api/profiles')).profiles;
+    await accountChecked;
+    quizAnswers = await loadQuiz();
   } catch (error) {
     showStep('you');
     showToast(error.message);
     return;
   }
-  quizAnswers = loadSavedQuiz();
   const savedMode = readStored(MODE_STORAGE_KEY) === 'quiz' ? 'quiz' : 'letterboxd';
   // Someone returning with a profile is ready to choose tonight's film.
   // Quiz answers are about what people are into right now, so they're shown again first.
