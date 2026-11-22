@@ -1,3 +1,5 @@
+const { readFilmPeople } = require('./film-people');
+
 // A saved shortlist comes back from the browser, so only the fields a pick card shows are kept,
 // each checked for type and size. Anything else is dropped.
 const MAX_PICKS = 8;
@@ -66,8 +68,8 @@ function readShortlistName(value) {
 }
 
 // Throws one plain message for any problem; the details only matter to someone editing requests by hand.
-function readSavedShortlist(body, moodIds) {
-  const { mode, mood, viewers, picks, backups = [] } = body ?? {};
+function readSavedShortlist(body, moodIds, subgenreIds = []) {
+  const { mode, mood, viewers, picks, backups = [], subgenres = [] } = body ?? {};
   const name = readShortlistName(body?.name);
   try {
     if (!MODES.includes(mode) || !moodIds.includes(mood)) throw new Error('bad mode or mood');
@@ -81,7 +83,11 @@ function readSavedShortlist(body, moodIds) {
     }
     if (!Array.isArray(picks) || picks.length === 0 || picks.length > MAX_PICKS) throw new Error('bad picks');
     if (!Array.isArray(backups) || backups.length > MAX_BACKUPS) throw new Error('bad backups');
-    return { name, mode, mood, viewers, picks: picks.map(readPick), backups: backups.map(readPick) };
+    if (!Array.isArray(subgenres) || subgenres.length > 3 || !subgenres.every((id) => subgenreIds.includes(id))) {
+      throw new Error('bad subgenres');
+    }
+    const withPeople = readFilmPeople(body.withPeople);
+    return { name, mode, mood, viewers, subgenres, withPeople, picks: picks.map(readPick), backups: backups.map(readPick) };
   } catch (error) {
     throw new Error("This shortlist can't be saved. Build it again and try saving once more.");
   }

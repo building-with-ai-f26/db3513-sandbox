@@ -21,6 +21,8 @@ const {
 } = require('./store');
 const { createAccountRouter, readAccount } = require('./accounts');
 const { readSavedShortlist, readShortlistName } = require('./saved-shortlists');
+const { SUBGENRES, readSubgenres, filterBySubgenres, listSubgenres } = require('./subgenres');
+const { readFilmPeople, filterByFilmPeople } = require('./film-people');
 const { ensureSchema, closePool } = require('./db');
 const { withSession, SESSION_LIFETIME_MS } = require('./sessions');
 const { createTmdbClient } = require('./tmdb');
@@ -124,6 +126,36 @@ const limitSearches = limitRequests(20, ONE_MINUTE_MS);
 const limitDailyShortlists = limitRequests(50, ONE_DAY_MS);
 // Slows down anyone guessing passwords.
 const limitAccountAttempts = limitRequests(30, ONE_MINUTE_MS);
+// Person search runs as people type, so it gets more room than shortlist searches.
+const limitPeopleSearches = limitRequests(120, ONE_MINUTE_MS);
+const MIN_PEOPLE_QUERY_LENGTH = 2;
+const MAX_PEOPLE_QUERY_LENGTH = 100;
+
+// Suggestions for the "Actor or director" refine field.
+app.get('/api/people', limitPeopleSearches, async (req, res) => {
+  const query = typeof req.query.query === 'string' ? req.query.query.trim() : '';
+  if (query.length < MIN_PEOPLE_QUERY_LENGTH || query.length > MAX_PEOPLE_QUERY_LENGTH) {
+    res.json({ people: [] });
+    return;
+  }
+  if (!process.env.TMDB_API_TOKEN) {
+    res.status(503).json({ error: 'TMDB_API_TOKEN is not set in .env yet.' });
+    return;
+  }
+  const tmdb = app.locals.createTmdb();
+  try {
+    res.json({ people: await tmdb.searchPeople(query) });
+  } catch (error) {
+    res.status(502).json({ error: error.message });
+  } finally {
+    tmdb.saveCache();
+  }
+});
+
+// Narrows candidates to the asked-for people first (strictly), then to subgenres (with a fallback).
+function refineCandidates(candidates, { filmPeople, subgenres }) {
+  return filterBySubgenres(filterByFilmPeople(candidates, filmPeople), subgenres);
+}
 
 app.use('/api/account', createAccountRouter({ secureCookies: IS_PUBLIC, limitAttempts: limitAccountAttempts }));
 app.use('/api/shortlists', readAccount);
@@ -158,7 +190,7 @@ app.get('/api/shortlists', requireAccount, async (req, res) => {
 app.post('/api/shortlists', requireAccount, express.json({ limit: '100kb' }), async (req, res) => {
   let details;
   try {
-    details = readSavedShortlist(req.body, MOODS.map((mood) => mood.id));
+    details = readSavedShortlist(req.body, MOODS.map((mood) => mood.id), SUBGENRES.map((subgenre) => subgenre.id));
   } catch (error) {
     res.status(400).json({ error: error.message });
     return;
@@ -407,6 +439,7 @@ app.get('/api/options', (req, res) => {
     moods: MOODS,
     genres: GENRES,
     eras: ERAS,
+    subgenres: listSubgenres(),
   });
 });
 
@@ -430,6 +463,15 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
     res.status(400).json({ error: "Pick tonight's mood." });
     return;
   }
+  let subgenres;
+  let filmPeople;
+  try {
+    subgenres = readSubgenres(req.body?.subgenres);
+    filmPeople = readFilmPeople(req.body?.withPeople);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
   if (!process.env.TMDB_API_TOKEN) {
     res.status(503).json({ error: 'TMDB_API_TOKEN is not set in .env yet.' });
     return;
@@ -444,11 +486,15 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
 
   const tmdb = app.locals.createTmdb();
   try {
-    const { candidates, stats } = await buildCandidates({ profiles, serviceIds, region, tmdb });
+    const built = await buildCandidates({ profiles, serviceIds, region, tmdb, filmPeople });
+    const { candidates, relaxed } = refineCandidates(built.candidates, { filmPeople, subgenres });
+    const { stats } = built;
     const { picks, backups } = await buildShortlist({
       candidates,
       people: profiles.filter(Boolean),
       mood,
+      subgenres,
+      filmPeople,
       model: process.env.ANTHROPIC_MODEL,
       claude: app.locals.createClaude(),
     });
@@ -462,7 +508,15 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
         pick_count: picks.length,
       },
     });
-    res.json({ picks, backups, candidateCount: candidates.length, stats });
+    res.json({
+      picks,
+      backups,
+      candidateCount: candidates.length,
+      stats,
+      subgenres: subgenres.map((subgenre) => subgenre.id),
+      subgenresRelaxed: relaxed,
+      withPeople: filmPeople,
+    });
   } catch (error) {
     emitPostHogLog({
       severityText: 'ERROR',
@@ -482,8 +536,12 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
 // No uploads and nothing saved: the answers arrive with the request and are gone after it.
 app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.json(), async (req, res) => {
   let answers;
+  let subgenres;
+  let filmPeople;
   try {
     answers = readAnswers(req.body);
+    subgenres = readSubgenres(req.body?.subgenres);
+    filmPeople = readFilmPeople(req.body?.withPeople);
   } catch (error) {
     res.status(400).json({ error: error.message });
     return;
@@ -496,11 +554,15 @@ app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.jso
 
   const tmdb = app.locals.createTmdb();
   try {
-    const { candidates, stats } = await buildQuizCandidates({ ...answers, tmdb });
+    const built = await buildQuizCandidates({ ...answers, tmdb, subgenres, filmPeople });
+    const { candidates, relaxed } = refineCandidates(built.candidates, { filmPeople, subgenres });
+    const { stats } = built;
     const { picks, backups } = await buildShortlist({
       candidates,
       people: answers.people.map(describeViewer),
       mood: answers.mood,
+      subgenres,
+      filmPeople,
       maxPicks: QUIZ_PICKS,
       effort: QUIZ_EFFORT,
       model: process.env.ANTHROPIC_MODEL,
@@ -516,7 +578,15 @@ app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.jso
         pick_count: picks.length,
       },
     });
-    res.json({ picks, backups, candidateCount: candidates.length, stats });
+    res.json({
+      picks,
+      backups,
+      candidateCount: candidates.length,
+      stats,
+      subgenres: subgenres.map((subgenre) => subgenre.id),
+      subgenresRelaxed: relaxed,
+      withPeople: filmPeople,
+    });
   } catch (error) {
     emitPostHogLog({
       severityText: 'ERROR',

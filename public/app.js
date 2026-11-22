@@ -78,6 +78,15 @@ const savedList = document.getElementById('saved-list');
 const historyStart = document.getElementById('history-start');
 const saveButton = document.getElementById('save-shortlist');
 const nameForm = document.getElementById('name-form');
+const refine = document.getElementById('refine');
+const refineGroups = document.getElementById('refine-groups');
+const refineSummary = document.getElementById('refine-summary');
+const refineHint = document.getElementById('refine-hint');
+const refineButton = document.getElementById('refine-button');
+const refineClear = document.getElementById('refine-clear');
+const personInput = document.getElementById('person-input');
+const personResults = document.getElementById('person-results');
+const personChips = document.getElementById('person-chips');
 const toast = document.getElementById('toast');
 const toastText = document.getElementById('toast-text');
 const toastAction = document.getElementById('toast-action');
@@ -104,6 +113,14 @@ let mode = 'letterboxd';
 let quizAnswers = [];
 let genres = [];
 let eras = [];
+let subgenreOptions = [];
+const MAX_SUBGENRES = 3;
+const MAX_FILM_PEOPLE = 2;
+const PERSON_SEARCH_DELAY_MS = 250;
+// People picked in the refine panel but not yet applied.
+let selectedPeople = [];
+let personSearchTimer = null;
+let latestPersonQuery = '';
 
 function cloneTemplate(id) {
   return document.getElementById(id).content.firstElementChild.cloneNode(true);
@@ -498,6 +515,7 @@ async function setUpFinder() {
   const options = await api('/api/options');
   genres = options.genres;
   eras = options.eras;
+  subgenreOptions = options.subgenres;
   const saved = loadSavedChoices();
   const savedMood = options.moods.some(({ id }) => id === saved.mood) ? saved.mood : 'either';
 
@@ -681,6 +699,8 @@ function quizRequest(choices) {
     })),
     mood: choices.mood,
     region: choices.region,
+    subgenres: choices.subgenres ?? [],
+    withPeople: choices.withPeople ?? [],
   };
 }
 
@@ -870,11 +890,173 @@ function summarizeResults({ picks, candidateCount, stats }) {
     : `Checked ${stats.checked} films and none are on your services. Try adding another service.`;
 }
 
-function describeTonight() {
+function subgenreNames(ids = []) {
+  return ids.map((id) => subgenreOptions.find((subgenre) => subgenre.id === id)?.name).filter(Boolean);
+}
+
+function describeFilmPeople(withPeople = []) {
+  return withPeople.length > 0 ? `with ${withPeople.map((person) => person.name).join(' & ')}` : null;
+}
+
+function describeTonight(subgenres, withPeople) {
   const date = new Date().toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   const mood = moodOptions.querySelector('input:checked')?.closest('label')?.querySelector('strong')?.textContent;
   // Non-breaking spaces keep "Sam & Alex" together and each dot at the end of its line.
-  return [date, viewerNames().join('\u00a0&\u00a0'), mood].filter(Boolean).join('\u00a0· ');
+  return [date, viewerNames().join('\u00a0&\u00a0'), mood, describeFilmPeople(withPeople), ...subgenreNames(subgenres)]
+    .filter(Boolean)
+    .join('\u00a0· ');
+}
+
+// Refine by genre
+function selectedSubgenres() {
+  return [...refineGroups.querySelectorAll('input:checked')].map((input) => input.value);
+}
+
+function sameSubgenres(a, b) {
+  return a.length === b.length && a.every((id) => b.includes(id));
+}
+
+function samePeople(a, b) {
+  return a.length === b.length && a.every((person) => b.some((other) => other.id === person.id));
+}
+
+// Refine is ready whenever the picked filters differ from the ones tonight's list was built with.
+function updateRefine() {
+  const activeSubgenres = lastChoices?.subgenres ?? [];
+  const activePeople = lastChoices?.withPeople ?? [];
+  const changed = !sameSubgenres(selectedSubgenres(), activeSubgenres) || !samePeople(selectedPeople, activePeople);
+  refineButton.disabled = !changed;
+  refineClear.hidden = activeSubgenres.length === 0 && activePeople.length === 0;
+}
+
+function renderPersonChips() {
+  personChips.replaceChildren(...selectedPeople.map((person) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'person-chip';
+    chip.textContent = `${person.name} ×`;
+    chip.setAttribute('aria-label', `Remove ${person.name}`);
+    chip.addEventListener('click', () => {
+      selectedPeople = selectedPeople.filter((other) => other.id !== person.id);
+      renderPersonChips();
+      personInput.focus();
+    });
+    return chip;
+  }));
+  const full = selectedPeople.length >= MAX_FILM_PEOPLE;
+  personInput.disabled = full;
+  personInput.placeholder = full ? 'Remove someone to add another' : 'Search by name';
+  updateRefine();
+}
+
+function hidePersonResults() {
+  personResults.hidden = true;
+  personResults.replaceChildren();
+}
+
+function choosePerson(person) {
+  if (!selectedPeople.some((other) => other.id === person.id)) {
+    selectedPeople = [...selectedPeople, { id: person.id, name: person.name }];
+  }
+  personInput.value = '';
+  hidePersonResults();
+  renderPersonChips();
+  if (!personInput.disabled) personInput.focus();
+}
+
+function renderPersonResults(people) {
+  if (people.length === 0) {
+    const empty = document.createElement('li');
+    empty.className = 'person-empty';
+    empty.textContent = 'No actors or directors found.';
+    personResults.replaceChildren(empty);
+  } else {
+    personResults.replaceChildren(...people.map((person) => {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'person-result';
+      const name = document.createElement('strong');
+      name.textContent = person.name;
+      const note = document.createElement('small');
+      note.textContent = [person.department, person.knownFor && `Known for ${person.knownFor}`].filter(Boolean).join(' · ');
+      button.append(name, note);
+      button.addEventListener('click', () => choosePerson(person));
+      item.append(button);
+      return item;
+    }));
+  }
+  personResults.hidden = false;
+}
+
+// Waits for a pause in typing, and ignores answers to anything but the latest query.
+function searchPeople() {
+  clearTimeout(personSearchTimer);
+  const query = personInput.value.trim();
+  if (query.length < 2) {
+    hidePersonResults();
+    return;
+  }
+  personSearchTimer = setTimeout(async () => {
+    latestPersonQuery = query;
+    try {
+      const { people } = await api(`/api/people?query=${encodeURIComponent(query)}`);
+      if (query === latestPersonQuery) renderPersonResults(people);
+    } catch (error) {
+      if (query === latestPersonQuery) showToast(error.message);
+    }
+  }, PERSON_SEARCH_DELAY_MS);
+}
+
+// Chips grouped under their main genre, with tonight's active ones already ticked.
+function renderRefine(active, activePeople = []) {
+  const groups = [...new Set(subgenreOptions.map((subgenre) => subgenre.group))];
+  refineGroups.replaceChildren(...groups.map((group) => {
+    const fieldset = document.createElement('fieldset');
+    fieldset.className = 'choices';
+    const legend = document.createElement('legend');
+    legend.textContent = group;
+    const chips = document.createElement('div');
+    chips.className = 'chips';
+    chips.append(...subgenreOptions.filter((subgenre) => subgenre.group === group).map((subgenre) => {
+      const label = renderChoice('checkbox', 'subgenre', subgenre.id, active.includes(subgenre.id), subgenre.name);
+      label.className = 'chip';
+      return label;
+    }));
+    fieldset.append(legend, chips);
+    return fieldset;
+  }));
+  refineHint.hidden = true;
+  // Closed by default, so the films stay near the top on a phone; the label says what's active.
+  refine.open = false;
+  const chosen = active.length + activePeople.length;
+  refineSummary.textContent = chosen > 0 ? `Refine by person or genre · ${chosen} chosen` : 'Refine by person or genre';
+  selectedPeople = [...activePeople];
+  personInput.value = '';
+  hidePersonResults();
+  renderPersonChips();
+}
+
+function onRefineChange(event) {
+  if (selectedSubgenres().length > MAX_SUBGENRES) {
+    event.target.checked = false;
+    refineHint.textContent = `Pick up to ${MAX_SUBGENRES} genres.`;
+    refineHint.hidden = false;
+  } else {
+    refineHint.hidden = true;
+  }
+  updateRefine();
+}
+
+// Each refine is a new shortlist, so it costs one more Claude call.
+function refineShortlist(subgenres, withPeople) {
+  captureEvent('shortlist_refined', {
+    shortlist_mode: mode,
+    subgenres,
+    subgenre_count: subgenres.length,
+    people_filter_count: withPeople.length,
+  });
+  buildShortlist({ ...lastChoices, subgenres, withPeople });
 }
 
 function renderShortlist({ picks, backups, viewers, context, summary, fromSaved, heading }) {
@@ -884,6 +1066,7 @@ function renderShortlist({ picks, backups, viewers, context, summary, fromSaved,
   resultsContext.textContent = context;
   resultsSummary.textContent = summary;
   backToSaved.hidden = !fromSaved;
+  refine.hidden = fromSaved;
   saveButton.hidden = fromSaved || picks.length === 0;
   saveButton.disabled = false;
   saveButton.textContent = 'Save shortlist';
@@ -895,7 +1078,7 @@ function renderShortlist({ picks, backups, viewers, context, summary, fromSaved,
   fitOverviews();
 }
 
-function showResults({ picks, backups, candidateCount, stats }) {
+function showResults({ picks, backups, candidateCount, stats, subgenres = [], subgenresRelaxed, withPeople = [] }) {
   captureEvent('shortlist_generated', {
     shortlist_mode: mode,
     people_count: mode === 'quiz' ? quizAnswers.length : filledCount(),
@@ -903,15 +1086,24 @@ function showResults({ picks, backups, candidateCount, stats }) {
     candidate_count: candidateCount,
   });
   const moodLabel = moodOptions.querySelector('input:checked')?.closest('label')?.querySelector('strong')?.textContent;
-  currentResult = { mode, mood: lastChoices.mood, moodLabel, viewers: viewerNames(), picks, backups };
+  currentResult = { mode, mood: lastChoices.mood, moodLabel, viewers: viewerNames(), subgenres, withPeople, picks, backups };
+  let summary = summarizeResults({ picks, candidateCount, stats });
+  if (picks.length === 0 && withPeople.length > 0) {
+    summary = `No films ${describeFilmPeople(withPeople)} came up that you can watch tonight. Try someone else, or clear the filters.`;
+  } else if (subgenresRelaxed && picks.length > 0) {
+    summary = `${summary} Few films were tagged with these genres, so these are the closest matches.`;
+  }
   renderShortlist({
     picks,
     backups,
     viewers: currentResult.viewers,
-    context: describeTonight(),
-    summary: summarizeResults({ picks, candidateCount, stats }),
+    context: describeTonight(subgenres, withPeople),
+    summary,
     fromSaved: false,
   });
+  renderRefine(subgenres, withPeople);
+  // With nothing matching, the filters are the next thing to change, so they open.
+  if (picks.length === 0 && (subgenres.length > 0 || withPeople.length > 0)) refine.open = true;
 }
 
 function formatSavedDate(iso) {
@@ -985,7 +1177,12 @@ async function openSaved(id) {
       picks: saved.picks,
       backups: saved.backups,
       viewers: saved.viewers,
-      context: `${formatSavedDate(saved.createdAt)}\u00a0· ${describeSaved({ viewers: saved.viewers, mood: saved.moodName })}`,
+      context: [
+        formatSavedDate(saved.createdAt),
+        describeSaved({ viewers: saved.viewers, mood: saved.moodName }),
+        describeFilmPeople(saved.withPeople),
+        ...subgenreNames(saved.subgenres),
+      ].filter(Boolean).join('\u00a0· '),
       summary: 'A shortlist saved to your account.',
       fromSaved: true,
       heading: saved.name || 'Saved Shortlist',
@@ -1142,6 +1339,13 @@ function setUpNavigation() {
   toTonight.addEventListener('click', () => goToStep('tonight'));
   modeOptions.addEventListener('change', (event) => setMode(event.target.value));
   document.getElementById('try-again').addEventListener('click', () => buildShortlist(lastChoices));
+  refineGroups.addEventListener('change', onRefineChange);
+  refineButton.addEventListener('click', () => refineShortlist(selectedSubgenres(), selectedPeople));
+  refineClear.addEventListener('click', () => refineShortlist([], []));
+  personInput.addEventListener('input', searchPeople);
+  personInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hidePersonResults();
+  });
   restorePicks.addEventListener('click', () => {
     const restored_count = resultsList.children.length - visiblePicks().length;
     captureEvent('shortlist_picks_restored', { shortlist_mode: mode, restored_count });

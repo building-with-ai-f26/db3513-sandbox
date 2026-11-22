@@ -262,3 +262,25 @@ test('a saved shortlist can be renamed, or have its name cleared, by its owner o
   assert.equal(saved.name, null);
   assert.equal(saved.picks.length, 6);
 });
+
+test('a saved shortlist keeps its subgenres, and unknown ones are refused', async () => {
+  const { cookie } = await signUp();
+  const built = await (await buildQuizShortlist(cookie)).json();
+  const saved = await request('/api/shortlists', { method: 'POST', cookie, body: { ...saveBody(built), subgenres: ['heist'] } });
+  const bad = await request('/api/shortlists', { method: 'POST', cookie, body: { ...saveBody(built), subgenres: ['made-up'] } });
+
+  assert.equal(bad.status, 400);
+  const { id } = await saved.json();
+  assert.deepEqual((await (await request(`/api/shortlists/${id}`, { cookie })).json()).subgenres, ['heist']);
+});
+
+test('a saved shortlist keeps the actors or directors it was refined by', async () => {
+  const { cookie } = await signUp();
+  const built = await (await buildQuizShortlist(cookie)).json();
+  const withPeople = [{ id: 1373737, name: 'Florence Pugh' }];
+  const { id } = await (await request('/api/shortlists', { method: 'POST', cookie, body: { ...saveBody(built), withPeople } })).json();
+  const bad = await request('/api/shortlists', { method: 'POST', cookie, body: { ...saveBody(built), withPeople: [{ id: 'x' }] } });
+
+  assert.equal(bad.status, 400);
+  assert.deepEqual((await (await request(`/api/shortlists/${id}`, { cookie })).json()).withPeople, withPeople);
+});

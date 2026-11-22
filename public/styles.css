@@ -916,6 +916,71 @@ button.veto:hover:not(:disabled) { background: var(--ink); color: var(--paper); 
 
 .account-switch button.quiet { min-height: 32px; padding: 4px 0; color: var(--ink); font-weight: 650; }
 
+/* Refine by genre: small chips grouped under their main genre */
+.refine { margin-top: 24px; }
+
+.refine .choices { margin-bottom: 14px; }
+
+.refine .choices legend { margin-bottom: 6px; font-size: 0.8125rem; }
+
+.refine .chips { gap: 6px; }
+
+.refine .chip span { padding: 6px 10px; font-size: 0.875rem; }
+
+.refine .actions { margin-top: 8px; }
+
+/* Actor or director search: suggestions open under the field, picks become removable chips */
+.person-search { margin-bottom: 16px; }
+
+.person-search label { margin-bottom: 8px; }
+
+.person-results {
+  margin: 0 0 8px;
+  padding: 0;
+  background: var(--panel);
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+  list-style: none;
+}
+
+.person-results li + li { border-top: 1px solid var(--rule); }
+
+button.person-result {
+  display: grid;
+  width: 100%;
+  gap: 2px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--ink);
+  font-weight: 400;
+  text-align: left;
+}
+
+button.person-result:hover:not(:disabled),
+button.person-result:focus-visible {
+  background: var(--skeleton);
+  border: none;
+  outline-offset: -2px;
+}
+
+.person-result strong { font-weight: 700; }
+
+.person-result small { color: var(--muted); font-size: 0.8125rem; }
+
+.person-empty {
+  padding: 10px 12px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+button.person-chip {
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+}
+
 /* My shortlists: ruled rows, like the program entries */
 .saved-list {
   margin: 24px 0 0;
@@ -1055,6 +1120,9 @@ button.saved-open:hover .saved-name { text-decoration: underline; text-underline
   }
 
   .program-side { position: sticky; top: 24px; }
+
+  /* An open genre list is taller than the screen, so the column scrolls with the page instead. */
+  .program-side:has(.refine[open]) { position: static; }
 
   .program > .picks { grid-template-columns: 1fr 1fr; margin-top: 0; }
 

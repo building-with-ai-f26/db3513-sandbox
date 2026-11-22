@@ -80,7 +80,7 @@ function chooseFilmsToCheck(pool) {
   return [...watchlistChecks, ...recommended.slice(0, MAX_CANDIDATES_CHECKED - watchlistChecks.length)];
 }
 
-async function buildCandidates({ profiles, serviceIds, region, tmdb }) {
+async function buildCandidates({ profiles, serviceIds, region, tmdb, filmPeople = [] }) {
   const people = profiles.filter(Boolean);
   const services = SERVICES.filter((service) => serviceIds.includes(service.id));
   const { isWatched, excluded } = createWatchedFilter(people);
@@ -123,6 +123,20 @@ async function buildCandidates({ profiles, serviceIds, region, tmdb }) {
       addToPool(recommendation, { type: 'recommended', person: person.name, because: film.name });
     }
   });
+
+  // Asked-for actors and directors: their films on these services, in this region.
+  if (filmPeople.length > 0) {
+    const discovered = await tmdb.discoverMovies({
+      personIds: filmPeople.map((person) => person.id),
+      providerIds: services.flatMap((service) => service.providerIds),
+      region,
+    });
+    const because = filmPeople.map((person) => person.name).join(' and ');
+    for (const film of discovered) {
+      if (isWatched(film)) continue;
+      for (const person of people) addToPool(film, { type: 'recommended', person: person.name, because });
+    }
+  }
 
   const toCheck = chooseFilmsToCheck(pool.values());
   const allDetails = await mapWithLimit(toCheck, MAX_TMDB_REQUESTS_AT_ONCE, (film) =>
