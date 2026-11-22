@@ -39,6 +39,26 @@ test('rejects a ZIP that would unpack to an oversized file', () => {
   assert.throws(() => buildProfile('Sam', [upload]), /ratings\.csv is too large/);
 });
 
+// Rewrites the uncompressed size in every header, the way a crafted ZIP bomb would.
+function fakeUncompressedSize(buffer, size) {
+  const forged = Buffer.from(buffer);
+  for (let offset = 0; offset < forged.length - 4; offset += 1) {
+    const signature = forged.readUInt32LE(offset);
+    if (signature === 0x04034b50) forged.writeUInt32LE(size, offset + 22);
+    if (signature === 0x02014b50) forged.writeUInt32LE(size, offset + 24);
+  }
+  return forged;
+}
+
+test('rejects a ZIP that lies about its size and would unpack to an oversized file', () => {
+  const zip = new AdmZip();
+  zip.addFile('ratings.csv', Buffer.alloc(21 * 1024 * 1024));
+  const upload = { originalname: 'export.zip', buffer: fakeUncompressedSize(zip.toBuffer(), 100) };
+
+  assert.ok(upload.buffer.length < 1024 * 1024);
+  assert.throws(() => buildProfile('Sam', [upload]), /ratings\.csv is too large/);
+});
+
 test('reads a ZIP export and ignores the deleted/ copies', () => {
   const files = exportFiles({
     ratings: [rating('Alpha', 5)],

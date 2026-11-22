@@ -15,6 +15,11 @@ const VALID_TOKEN = /^[0-9a-f]{64}$/;
 // Loose on purpose: the only real check is that the person can sign in with it later.
 const LOOKS_LIKE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LOGIN_MISMATCH = "That email and password don't match.";
+// After this many wrong passwords for one email, sign-in for it pauses, whatever IP the guesses come from.
+const MAX_FAILED_LOGINS = 10;
+const LOCKOUT_MS = 15 * 60 * 1000;
+const MAX_TRACKED_EMAILS = 10000;
+const LOCKED_OUT = 'Too many wrong passwords for this account. Try again in 15 minutes.';
 
 // Stored as scrypt$salt$hash, so the salt travels with the hash.
 async function hashPassword(password) {
@@ -72,6 +77,26 @@ async function readAccount(req, res, next) {
 
 function createAccountRouter({ secureCookies, limitAttempts }) {
   const router = express.Router();
+  // email -> { count, firstAt }. Kept in memory: a restart clears it, which only shortens a lockout.
+  const failedLogins = new Map();
+
+  function isLockedOut(email, now = Date.now()) {
+    const entry = failedLogins.get(email);
+    if (entry && now - entry.firstAt >= LOCKOUT_MS) failedLogins.delete(email);
+    return (failedLogins.get(email)?.count ?? 0) >= MAX_FAILED_LOGINS;
+  }
+
+  function recordFailedLogin(email, now = Date.now()) {
+    const entry = failedLogins.get(email) ?? { count: 0, firstAt: now };
+    entry.count += 1;
+    failedLogins.set(email, entry);
+    // Guesses spread over many emails could grow the map, so expired entries are swept once it's large.
+    if (failedLogins.size > MAX_TRACKED_EMAILS) {
+      for (const [key, { firstAt }] of failedLogins) {
+        if (now - firstAt >= LOCKOUT_MS) failedLogins.delete(key);
+      }
+    }
+  }
   const cookieOptions = { httpOnly: true, sameSite: 'lax', secure: secureCookies, path: '/' };
 
   async function startSession(res, user) {
@@ -117,12 +142,18 @@ function createAccountRouter({ secureCookies, limitAttempts }) {
       res.status(401).json({ error: LOGIN_MISMATCH });
       return;
     }
+    if (isLockedOut(credentials.email)) {
+      res.status(429).json({ error: LOCKED_OUT });
+      return;
+    }
     const user = await store.findUserByEmail(credentials.email);
     const matches = await verifyPassword(credentials.password, user?.passwordHash ?? (await DUMMY_HASH));
     if (!user || !matches) {
+      recordFailedLogin(credentials.email);
       res.status(401).json({ error: LOGIN_MISMATCH });
       return;
     }
+    failedLogins.delete(credentials.email);
     await startSession(res, user);
   });
 
@@ -137,6 +168,7 @@ function createAccountRouter({ secureCookies, limitAttempts }) {
 }
 
 module.exports = {
+  MAX_FAILED_LOGINS,
   createAccountRouter,
   readAccount,
   hashPassword,

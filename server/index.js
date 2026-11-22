@@ -30,6 +30,7 @@ const { buildCandidates, SERVICES, REGIONS } = require('./candidates');
 const { buildShortlist, MOODS, QUIZ_PICKS, QUIZ_EFFORT } = require('./shortlist');
 const { readAnswers, readStoredQuiz, describeViewer, buildQuizCandidates, GENRES, ERAS } = require('./quiz');
 const { createPostHogLogger } = require('./posthog-logs');
+const { limitRequests, limitPerVisitor } = require('./rate-limits');
 
 const PORT = process.env.PORT || 3000;
 const MAX_NAME_LENGTH = 40;
@@ -57,6 +58,40 @@ function emitPostHogLog(record) {
 }
 
 const app = express();
+app.disable('x-powered-by');
+// Render sits in front of the app, so the visitor's own IP is the one it forwards.
+if (IS_PUBLIC) app.set('trust proxy', 1);
+
+// Basic browser protections on every response: the site can't be framed by another site
+// (clickjacking), files aren't reinterpreted as another type, and full URLs don't leak to other sites.
+app.use((req, res, next) => {
+  res.set({
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': "frame-ancestors 'none'",
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  });
+  next();
+});
+
+// A browser always says where a request came from. Changes sent from another site are refused,
+// on top of the SameSite cookies, so no other site can act as a signed-in visitor.
+const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+function isSameSite(origin, host) {
+  try {
+    return new URL(origin).host === host;
+  } catch (error) {
+    return false;
+  }
+}
+app.use('/api', (req, res, next) => {
+  const { origin } = req.headers;
+  if (SAFE_METHODS.includes(req.method) || !origin || isSameSite(origin, req.headers.host)) {
+    next();
+    return;
+  }
+  res.status(403).json({ error: 'That request came from another site, so it was refused.' });
+});
 
 // Tests swap these for fakes, so no test makes a paid call.
 app.locals.createTmdb = () => createTmdbClient(process.env.TMDB_API_TOKEN);
@@ -65,7 +100,8 @@ app.locals.createClaude = () => new Anthropic({ apiKey: process.env.ANTHROPIC_AP
 // Uploads are held in memory just long enough to read them.
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024, files: 10 },
+  // The forms only send a name and a username, so anything more is refused.
+  limits: { fileSize: 5 * 1024 * 1024, files: 10, fields: 5, fieldSize: 1024 },
 });
 
 // Everything in public/ is sent to the browser, so secrets must never go there.
@@ -100,34 +136,16 @@ function profileOwner(req) {
   return req.user ? { userId: req.user.id } : { sessionId: req.sessionId };
 }
 
-// One counter for the whole app, which caps the load no matter who is sending.
-function limitRequests(maxRequests, windowMs) {
-  let windowStart = 0;
-  let count = 0;
 
-  return (req, res, next) => {
-    const now = Date.now();
-    if (now - windowStart >= windowMs) {
-      windowStart = now;
-      count = 0;
-    }
-    count += 1;
-    if (count > maxRequests) {
-      res.status(429).json({ error: 'The app is busy right now. Try again later.' });
-      return;
-    }
-    next();
-  };
-}
-
-const limitUploads = limitRequests(60, ONE_MINUTE_MS);
+const limitUploads = [limitRequests(60, ONE_MINUTE_MS), limitPerVisitor(20, ONE_MINUTE_MS)];
 const limitSearches = limitRequests(20, ONE_MINUTE_MS);
 // Every shortlist is a paid Claude call, so this caps what the public site can spend.
-const limitDailyShortlists = limitRequests(50, ONE_DAY_MS);
-// Slows down anyone guessing passwords.
-const limitAccountAttempts = limitRequests(30, ONE_MINUTE_MS);
+// Each visitor also gets a share of it, so one person can't use up the day for everyone.
+const limitDailyShortlists = [limitRequests(50, ONE_DAY_MS), limitPerVisitor(20, ONE_DAY_MS)];
+// Slows down anyone guessing passwords. Per account, accounts.js also locks sign-in after repeated misses.
+const limitAccountAttempts = [limitRequests(300, ONE_MINUTE_MS), limitPerVisitor(60, ONE_MINUTE_MS)];
 // Person search runs as people type, so it gets more room than shortlist searches.
-const limitPeopleSearches = limitRequests(120, ONE_MINUTE_MS);
+const limitPeopleSearches = [limitRequests(600, ONE_MINUTE_MS), limitPerVisitor(120, ONE_MINUTE_MS)];
 const MIN_PEOPLE_QUERY_LENGTH = 2;
 const MAX_PEOPLE_QUERY_LENGTH = 100;
 

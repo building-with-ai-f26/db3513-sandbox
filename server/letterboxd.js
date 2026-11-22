@@ -1,10 +1,14 @@
 const path = require('path');
+const zlib = require('zlib');
 const AdmZip = require('adm-zip');
 const { parse } = require('csv-parse/sync');
 
 const TOP_RATED_CUTOFF = 4;
 const TOP_RATED_MINIMUM = 10;
 const MAX_UNZIPPED_BYTES = 20 * 1024 * 1024;
+// ZIP compression methods: 0 is stored as-is, 8 is the usual deflate.
+const STORED = 0;
+const DEFLATED = 8;
 
 // Confirmed against a real Letterboxd export on 2026-11-08.
 const EXPECTED_COLUMNS = {
@@ -12,6 +16,25 @@ const EXPECTED_COLUMNS = {
   'watched.csv': ['Date', 'Name', 'Year', 'Letterboxd URI'],
   'watchlist.csv': ['Date', 'Name', 'Year', 'Letterboxd URI'],
 };
+
+// A tiny ZIP can unpack to gigabytes, and the size written in its header can be faked,
+// so entries are unpacked here with a hard limit on the output instead of trusting it.
+function unzipEntry(entry, name) {
+  const tooLarge = new Error(`${name} is too large.`);
+  if (entry.header.size > MAX_UNZIPPED_BYTES) throw tooLarge;
+  const compressed = entry.getCompressedData();
+  if (entry.header.method === STORED) {
+    if (compressed.length > MAX_UNZIPPED_BYTES) throw tooLarge;
+    return compressed;
+  }
+  if (entry.header.method !== DEFLATED) throw new Error(`${name} uses a kind of compression this app can't read.`);
+  try {
+    return zlib.inflateRawSync(compressed, { maxOutputLength: MAX_UNZIPPED_BYTES });
+  } catch (error) {
+    if (error.code === 'ERR_BUFFER_TOO_LARGE' || error instanceof RangeError) throw tooLarge;
+    throw new Error(`Couldn't unzip ${name}.`);
+  }
+}
 
 // Accepts the ZIP, the loose CSVs, or a mix, and ignores every other file.
 function collectCsvText(uploads) {
@@ -26,9 +49,7 @@ function collectCsvText(uploads) {
         // Top-level entries only, so deleted/ and orphaned/ copies are skipped.
         const entry = zip.getEntry(expectedName);
         if (!entry) continue;
-        // A tiny ZIP can unpack to gigabytes, so check before unpacking.
-        if (entry.header.size > MAX_UNZIPPED_BYTES) throw new Error(`${expectedName} is too large.`);
-        csvText[expectedName] = entry.getData().toString('utf8');
+        csvText[expectedName] = unzipEntry(entry, expectedName).toString('utf8');
       }
     } else if (Object.hasOwn(EXPECTED_COLUMNS, fileName)) {
       csvText[fileName] = upload.buffer.toString('utf8');
