@@ -203,3 +203,54 @@ test('lists a service once when it is both free and ad-supported', async (t) => 
 
   assert.deepEqual(details.watchOptionsByRegion.US.free, ['The CW', 'Tubi']);
 });
+
+test('discovers by keyword, person and streaming service when asked', async (t) => {
+  const requests = stubFetch(t, [{ body: { results: [] } }]);
+
+  await createTmdbClient('token', {}).discoverMovies({ keywordIds: [10051, 703], personIds: [5], providerIds: [8, 15], region: 'US' });
+
+  const params = new URL(requests[0].url).searchParams;
+  assert.equal(params.get('with_keywords'), '10051|703');
+  assert.equal(params.get('with_people'), '5');
+  assert.equal(params.get('with_watch_providers'), '8|15');
+  assert.equal(params.get('watch_region'), 'US');
+});
+
+test('film details carry keyword ids, top-billed cast and directors', async (t) => {
+  const cast = Array.from({ length: 20 }, (_, index) => ({ id: index + 1 }));
+  const requests = stubFetch(t, [{
+    body: {
+      ...movie('Alpha', '2001-05-01'),
+      status: 'Released',
+      genres: [],
+      keywords: { keywords: [{ id: 10051 }] },
+      credits: { cast, crew: [{ id: 99, job: 'Director' }, { id: 98, job: 'Writer' }] },
+    },
+  }]);
+
+  const details = await createTmdbClient('token', {}).getDetails(1);
+
+  assert.equal(new URL(requests[0].url).searchParams.get('append_to_response'), 'watch/providers,keywords,credits');
+  assert.deepEqual(details.keywordIds, [10051]);
+  assert.equal(details.castIds.length, 15);
+  assert.deepEqual(details.directorIds, [99]);
+});
+
+test('person search keeps actors and directors, with what they are known for', async (t) => {
+  stubFetch(t, [{
+    body: {
+      results: [
+        { id: 1, name: 'Florence Pugh', known_for_department: 'Acting', known_for: [{ title: 'Midsommar' }] },
+        { id: 2, name: 'A Producer', known_for_department: 'Production', known_for: [] },
+        { id: 3, name: 'Greta Gerwig', known_for_department: 'Directing', known_for: [{ name: 'A Show' }] },
+      ],
+    },
+  }]);
+
+  const people = await createTmdbClient('token', {}).searchPeople('fl');
+
+  assert.deepEqual(people, [
+    { id: 1, name: 'Florence Pugh', department: 'Acting', knownFor: 'Midsommar' },
+    { id: 3, name: 'Greta Gerwig', department: 'Directing', knownFor: 'A Show' },
+  ]);
+});

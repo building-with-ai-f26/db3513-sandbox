@@ -167,7 +167,7 @@ function hasWayToWatch(options) {
   return Object.values(options).some((names) => names.length > 0);
 }
 
-async function buildQuizCandidates({ people, region, tmdb }) {
+async function buildQuizCandidates({ people, region, tmdb, subgenres = [], filmPeople = [] }) {
   const avoidGenreIds = [...new Set(people.flatMap((person) => person.avoidGenreIds))];
   const avoidNames = new Set(genreNames(avoidGenreIds));
   const pool = new Map();
@@ -205,6 +205,21 @@ async function buildQuizCandidates({ people, region, tmdb }) {
       }
     });
   }
+
+  // Tonight's refinements pull in films tagged with the subgenres or featuring the chosen people,
+  // shared by every viewer.
+  async function addRefinedFilms(filters) {
+    const pages = Array.from({ length: DISCOVER_PAGES_PER_PERSON }, (_, index) => index + 1);
+    const discovered = await mapWithLimit(pages, MAX_TMDB_REQUESTS_AT_ONCE, (page) =>
+      tmdb.discoverMovies({ ...filters, avoidGenreIds, page }),
+    );
+    for (const film of discovered.flat()) {
+      for (const person of people) addToPool(film, { type: 'interest', person: person.name });
+    }
+  }
+  const keywordIds = [...new Set(subgenres.flatMap((subgenre) => subgenre.keywords))];
+  if (keywordIds.length > 0) await addRefinedFilms({ keywordIds });
+  if (filmPeople.length > 0) await addRefinedFilms({ personIds: filmPeople.map((person) => person.id) });
 
   // Films someone named as a favorite have already been seen.
   const toCheck = chooseFilmsToCheck(

@@ -3,6 +3,8 @@ const { loadTmdbCache, saveTmdbCache } = require('./store');
 const BASE_URL = 'https://api.themoviedb.org/3';
 const CACHE_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const MAX_ATTEMPTS = 3;
+const TOP_BILLED_CAST = 15;
+const MAX_PEOPLE_RESULTS = 5;
 
 // Ignores case and punctuation, so "WALL·E" and "WALL-E" count as the same title.
 function comparableTitle(title) {
@@ -115,6 +117,22 @@ function createTmdbClient(token, cache = loadTmdbCache()) {
     });
   }
 
+  // Actors and directors matching a typed name, most popular first, for the refine search.
+  function searchPeople(query) {
+    return cached(`people:${query.toLowerCase()}`, async () => {
+      const { results } = await request('/search/person', { query, include_adult: 'false' });
+      return results
+        .filter((person) => ['Acting', 'Directing'].includes(person.known_for_department))
+        .slice(0, MAX_PEOPLE_RESULTS)
+        .map((person) => ({
+          id: person.id,
+          name: person.name,
+          department: person.known_for_department,
+          knownFor: (person.known_for ?? []).map((work) => work.title ?? work.name).find(Boolean) ?? null,
+        }));
+    });
+  }
+
   // Finds a typed title without a year, preferring an exact title match over the top result.
   function findMovie(name) {
     return cached(`find:${name}`, async () => {
@@ -130,7 +148,19 @@ function createTmdbClient(token, cache = loadTmdbCache()) {
   }
 
   // Well-reviewed films in any of the given genres, skipping the avoided ones.
-  function discoverMovies({ genreIds, avoidGenreIds = [], fromYear, toYear, page = 1 }) {
+  // Keyword ids find films by subgenre tag and person ids by cast or crew; any one of each is enough.
+  // Provider ids with a region keep only films streaming on those services there.
+  function discoverMovies({
+    genreIds = [],
+    keywordIds = [],
+    personIds = [],
+    providerIds = [],
+    region,
+    avoidGenreIds = [],
+    fromYear,
+    toYear,
+    page = 1,
+  }) {
     const params = {
       with_genres: genreIds.join('|'),
       without_genres: avoidGenreIds.join(','),
@@ -141,6 +171,12 @@ function createTmdbClient(token, cache = loadTmdbCache()) {
     };
     if (fromYear) params['primary_release_date.gte'] = `${fromYear}-01-01`;
     if (toYear) params['primary_release_date.lte'] = `${toYear}-12-31`;
+    if (keywordIds.length > 0) params.with_keywords = keywordIds.join('|');
+    if (personIds.length > 0) params.with_people = personIds.join('|');
+    if (providerIds.length > 0 && region) {
+      params.with_watch_providers = providerIds.join('|');
+      params.watch_region = region;
+    }
 
     return cached(`discover:${new URLSearchParams(params)}`, async () => {
       const { results } = await request('/discover/movie', params);
@@ -157,7 +193,7 @@ function createTmdbClient(token, cache = loadTmdbCache()) {
 
   function getDetails(id) {
     return cached(`details:${id}`, async () => {
-      const movie = await request(`/movie/${id}`, { append_to_response: 'watch/providers' });
+      const movie = await request(`/movie/${id}`, { append_to_response: 'watch/providers,keywords,credits' });
       return {
         ...trimRecommendation(movie),
         status: movie.status,
@@ -165,6 +201,10 @@ function createTmdbClient(token, cache = loadTmdbCache()) {
         posterPath: movie.poster_path,
         overview: movie.overview,
         genres: movie.genres.map((genre) => genre.name),
+        keywordIds: (movie.keywords?.keywords ?? []).map((keyword) => keyword.id),
+        // Top-billed cast only, so a cameo doesn't count and the cache stays small.
+        castIds: (movie.credits?.cast ?? []).slice(0, TOP_BILLED_CAST).map((person) => person.id),
+        directorIds: (movie.credits?.crew ?? []).filter((person) => person.job === 'Director').map((person) => person.id),
         providersByRegion: trimProviders(movie['watch/providers']),
         watchOptionsByRegion: trimWatchOptions(movie['watch/providers']),
       };
@@ -175,6 +215,7 @@ function createTmdbClient(token, cache = loadTmdbCache()) {
     searchMovie,
     findMovie,
     discoverMovies,
+    searchPeople,
     getRecommendations,
     getDetails,
     saveCache: () => saveTmdbCache(cache),

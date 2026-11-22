@@ -169,6 +169,24 @@
             <button type="button" class="secondary" data-go-to="tonight">Change mood</button>
             <button type="button" class="secondary" id="back-to-saved" hidden>My shortlists</button>
           </div>
+          <details class="help refine" id="refine">
+            <summary id="refine-summary">Refine by person or genre</summary>
+            <p class="more">Pick up to 2 actors or directors and up to 3 genres. Refining builds a new shortlist.</p>
+            <div class="person-search">
+              <label>
+                Actor or director
+                <input type="search" id="person-input" maxlength="100" autocomplete="off" spellcheck="false" placeholder="Search by name" />
+              </label>
+              <ul class="person-results" id="person-results" aria-label="Matching people" hidden></ul>
+              <div class="chips" id="person-chips"></div>
+            </div>
+            <div id="refine-groups"></div>
+            <p class="hint" id="refine-hint" hidden></p>
+            <div class="actions">
+              <button type="button" id="refine-button" disabled>Refine</button>
+              <button type="button" class="secondary" id="refine-clear" hidden>Clear filters</button>
+            </div>
+          </details>
         </div>
         <ol class="picks" id="results-list"></ol>
         <p class="attribution">
