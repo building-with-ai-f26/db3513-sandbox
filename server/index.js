@@ -5,7 +5,9 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { buildProfile, mergeDiary, summarizeProfile } = require('./letterboxd');
 const { normalizeUsername, fetchDiary } = require('./letterboxd-rss');
 const { parseNetflixHistory } = require('./netflix');
-const { loadProfiles, saveProfiles, deleteExpiredSessions } = require('./store');
+const { loadProfiles, saveProfiles, deleteExpiredSessions, deleteExpiredAccountSessions } = require('./store');
+const { createAccountRouter } = require('./accounts');
+const { ensureSchema, closePool } = require('./db');
 const { withSession, SESSION_LIFETIME_MS } = require('./sessions');
 const { createTmdbClient } = require('./tmdb');
 const { buildCandidates, SERVICES, REGIONS } = require('./candidates');
@@ -96,6 +98,10 @@ const limitUploads = limitRequests(60, ONE_MINUTE_MS);
 const limitSearches = limitRequests(20, ONE_MINUTE_MS);
 // Every shortlist is a paid Claude call, so this caps what the public site can spend.
 const limitDailyShortlists = limitRequests(50, ONE_DAY_MS);
+// Slows down anyone guessing passwords.
+const limitAccountAttempts = limitRequests(30, ONE_MINUTE_MS);
+
+app.use('/api/account', createAccountRouter({ secureCookies: IS_PUBLIC, limitAttempts: limitAccountAttempts }));
 
 function missingKeysError() {
   if (!process.env.TMDB_API_TOKEN) return 'TMDB_API_TOKEN is not set in .env yet.';
@@ -397,7 +403,9 @@ app.use((error, req, res, next) => {
 });
 
 // 127.0.0.1 means only this laptop can reach the app. The public host needs 0.0.0.0.
-if (require.main === module) {
+async function start() {
+  // Creates the account tables on first run; a no-op without DATABASE_URL.
+  await ensureSchema();
   const server = app.listen(PORT, IS_PUBLIC ? '0.0.0.0' : '127.0.0.1', () => {
     console.log(`The Shortlist is running on port ${PORT}`);
   });
@@ -412,6 +420,7 @@ if (require.main === module) {
       } catch (error) {
         console.warn('PostHog log exporter shutdown failed.');
       }
+      await closePool();
       process.exit(0);
     });
   }
@@ -422,6 +431,14 @@ if (require.main === module) {
     deleteExpiredSessions(SESSION_LIFETIME_MS);
     setInterval(() => deleteExpiredSessions(SESSION_LIFETIME_MS), ONE_HOUR_MS);
   }
+  setInterval(() => deleteExpiredAccountSessions().catch(() => {}), ONE_HOUR_MS);
+}
+
+if (require.main === module) {
+  start().catch((error) => {
+    console.error(`The Shortlist could not start: ${error.message}`);
+    process.exit(1);
+  });
 }
 
 module.exports = app;

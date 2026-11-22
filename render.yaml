@@ -20,3 +20,6 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-opus-5-5
+      # Accounts live in Postgres, since Render's free disk is wiped on every restart.
+      - key: DATABASE_URL
+        sync: false

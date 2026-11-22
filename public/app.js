@@ -58,6 +58,17 @@ const resultsContext = document.getElementById('results-context');
 const resultsSummary = document.getElementById('results-summary');
 const resultsList = document.getElementById('results-list');
 const restorePicks = document.getElementById('restore-picks');
+const accountEmail = document.getElementById('account-email');
+const signInButton = document.getElementById('sign-in');
+const signOutButton = document.getElementById('sign-out');
+const accountDialog = document.getElementById('account-dialog');
+const accountForm = document.getElementById('account-form');
+const accountTitle = document.getElementById('account-title');
+const accountError = document.getElementById('account-error');
+const accountSubmit = document.getElementById('account-submit');
+const accountSwitch = document.getElementById('account-switch');
+const accountSwitchText = document.getElementById('account-switch-text');
+const passwordNote = document.getElementById('password-note');
 const toast = document.getElementById('toast');
 const toastText = document.getElementById('toast-text');
 const toastAction = document.getElementById('toast-action');
@@ -68,6 +79,8 @@ let pendingRemoval = null;
 let lastChoices = null;
 let hasShortlist = false;
 let backupPicks = [];
+let account = null;
+let accountMode = 'login';
 let toastTimer = null;
 let loadingTimer = null;
 let mode = 'letterboxd';
@@ -845,16 +858,100 @@ function setUpNavigation() {
     resultsHeading.focus({ preventScroll: true });
   });
 
-  // Leaving the page ends the Undo window, so the removal still has to reach the server.
   window.addEventListener('resize', fitOverviews);
 
+  // Leaving the page ends the Undo window, so the removal still has to reach the server.
   window.addEventListener('pagehide', () => {
     if (pendingRemoval) fetch(`/api/profiles/${pendingRemoval.slot}`, { method: 'DELETE', keepalive: true });
   });
 }
 
+// Account
+function renderAccount() {
+  accountEmail.textContent = account?.email ?? '';
+  accountEmail.hidden = !account;
+  signInButton.hidden = Boolean(account);
+  signOutButton.hidden = !account;
+  // Narrow screens hide the email, so it's still there on hover and to screen readers.
+  signOutButton.title = account ? `Signed in as ${account.email}` : '';
+  signOutButton.setAttribute('aria-label', account ? `Sign out of ${account.email}` : 'Sign out');
+}
+
+function setAccountMode(nextMode) {
+  accountMode = nextMode;
+  const isSignup = nextMode === 'signup';
+  accountTitle.textContent = isSignup ? 'Create an account' : 'Sign in';
+  accountSubmit.textContent = isSignup ? 'Create account' : 'Sign in';
+  accountSwitchText.textContent = isSignup ? 'Already have an account?' : 'New here?';
+  accountSwitch.textContent = isSignup ? 'Sign in' : 'Create an account';
+  accountForm.elements.password.autocomplete = isSignup ? 'new-password' : 'current-password';
+  passwordNote.hidden = !isSignup;
+  accountError.hidden = true;
+}
+
+function openAccountDialog() {
+  setAccountMode('login');
+  accountForm.reset();
+  accountDialog.showModal();
+}
+
+async function submitAccount(event) {
+  event.preventDefault();
+  const isSignup = accountMode === 'signup';
+  accountSubmit.disabled = true;
+  accountError.hidden = true;
+  try {
+    const body = await api(`/api/account/${isSignup ? 'signup' : 'login'}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: accountForm.elements.email.value,
+        password: accountForm.elements.password.value,
+      }),
+    });
+    account = body.user;
+    renderAccount();
+    accountDialog.close();
+    captureEvent(isSignup ? 'account_created' : 'account_signed_in', {});
+    showToast(isSignup ? `Account created for ${account.email}.` : `Signed in as ${account.email}.`);
+  } catch (error) {
+    accountError.textContent = error.message;
+    accountError.hidden = false;
+  } finally {
+    accountSubmit.disabled = false;
+  }
+}
+
+async function signOut() {
+  try {
+    await api('/api/account/logout', { method: 'POST' });
+    account = null;
+    renderAccount();
+    captureEvent('account_signed_out', {});
+    showToast('Signed out.');
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function setUpAccount() {
+  signInButton.addEventListener('click', openAccountDialog);
+  signOutButton.addEventListener('click', signOut);
+  accountForm.addEventListener('submit', submitAccount);
+  accountSwitch.addEventListener('click', () => setAccountMode(accountMode === 'login' ? 'signup' : 'login'));
+  document.getElementById('account-close').addEventListener('click', () => accountDialog.close());
+  // Signing in is optional, so a failed check just leaves the page signed out.
+  api('/api/account')
+    .then((body) => {
+      account = body.user;
+      renderAccount();
+    })
+    .catch(() => {});
+}
+
 async function start() {
   setUpNavigation();
+  setUpAccount();
   try {
     await setUpFinder();
     profiles = (await api('/api/profiles')).profiles;
