@@ -14,6 +14,13 @@ const SCHEMA = `
     user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     expires_at TIMESTAMPTZ NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS shortlists (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
+    details JSONB NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS shortlists_by_user ON shortlists (user_id, created_at DESC);
 `;
 
 let pool = null;

@@ -887,6 +887,8 @@ button.veto:hover:not(:disabled) { background: var(--ink); color: var(--paper); 
 
 .account-dialog::backdrop { background: rgb(18 18 23 / 0.55); }
 
+.account-reason { margin: -8px 0 16px; }
+
 .dialog-header {
   display: flex;
   align-items: center;
@@ -913,6 +915,85 @@ button.veto:hover:not(:disabled) { background: var(--ink); color: var(--paper); 
 }
 
 .account-switch button.quiet { min-height: 32px; padding: 4px 0; color: var(--ink); font-weight: 650; }
+
+/* My shortlists: ruled rows, like the program entries */
+.saved-list {
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  border-top: 1.5px solid var(--ink);
+}
+
+.saved:last-child { border-bottom: 1px solid var(--rule); }
+
+button.saved-open {
+  display: grid;
+  flex: 1;
+  gap: 4px;
+  min-width: 0;
+  padding: 16px 0 18px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  color: var(--ink);
+  font-weight: 400;
+  text-align: left;
+}
+
+button.saved-open:hover:not(:disabled) { background: none; border: none; }
+
+button.saved-open:hover .saved-name { text-decoration: underline; text-underline-offset: 4px; }
+
+.saved-name {
+  overflow-wrap: anywhere;
+  font-size: 1.25rem;
+  font-stretch: 85%;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.saved-meta {
+  font-size: 0.75rem;
+  font-weight: 750;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.saved-titles {
+  color: var(--muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.saved-actions {
+  display: flex;
+  flex: none;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+/* Renaming swaps the row's text for a field in place. */
+.rename-form {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 0 18px;
+}
+
+.rename-form label { margin-bottom: 12px; }
+
+.rename-form .actions { margin-top: 0; }
+
+.name-form { margin-top: 20px; }
+
+.name-form label { margin-bottom: 12px; }
+
+.name-form .actions { margin-top: 0; }
 
 /* Toast */
 .toast {

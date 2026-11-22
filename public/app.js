@@ -69,6 +69,14 @@ const accountSubmit = document.getElementById('account-submit');
 const accountSwitch = document.getElementById('account-switch');
 const accountSwitchText = document.getElementById('account-switch-text');
 const passwordNote = document.getElementById('password-note');
+const accountReason = document.getElementById('account-reason');
+const myShortlistsButton = document.getElementById('my-shortlists');
+const backToSaved = document.getElementById('back-to-saved');
+const historySummary = document.getElementById('history-summary');
+const savedList = document.getElementById('saved-list');
+const historyStart = document.getElementById('history-start');
+const saveButton = document.getElementById('save-shortlist');
+const nameForm = document.getElementById('name-form');
 const toast = document.getElementById('toast');
 const toastText = document.getElementById('toast-text');
 const toastAction = document.getElementById('toast-action');
@@ -81,6 +89,13 @@ let hasShortlist = false;
 let backupPicks = [];
 let account = null;
 let accountMode = 'login';
+// Whose names the pick labels use: tonight's viewers, or a saved list's.
+let shownViewers = [];
+let shownHeading = "Today's Shortlist";
+let pendingDelete = null;
+// The shortlist on screen, kept so it can be saved if the person chooses to.
+let currentResult = null;
+let saveAfterSignIn = false;
 let toastTimer = null;
 let loadingTimer = null;
 let mode = 'letterboxd';
@@ -654,7 +669,7 @@ function updatePicksHeading() {
 
   if (remaining === 0) resultsHeading.textContent = 'None of these tonight';
   else if (remaining === 1 && vetoed > 0) resultsHeading.textContent = 'Your pick for tonight';
-  else resultsHeading.textContent = "Today's Shortlist";
+  else resultsHeading.textContent = shownHeading;
 }
 
 function listServices(names) {
@@ -720,7 +735,7 @@ function viewerNames() {
 function inkFor(label) {
   if (!label) return 'first';
   if (label === 'Both of you') return 'both';
-  return label === `${viewerNames()[0]}'s pick` ? 'first' : 'second';
+  return label === `${shownViewers[0]}'s pick` ? 'first' : 'second';
 }
 
 function renderPick(pick, index) {
@@ -800,6 +815,24 @@ function describeTonight() {
   return [date, viewerNames().join('\u00a0&\u00a0'), mood].filter(Boolean).join('\u00a0· ');
 }
 
+function renderShortlist({ picks, backups, viewers, context, summary, fromSaved, heading }) {
+  shownViewers = viewers;
+  shownHeading = heading ?? "Today's Shortlist";
+  nameForm.hidden = true;
+  resultsContext.textContent = context;
+  resultsSummary.textContent = summary;
+  backToSaved.hidden = !fromSaved;
+  saveButton.hidden = fromSaved || picks.length === 0;
+  saveButton.disabled = false;
+  saveButton.textContent = 'Save shortlist';
+  backupPicks = [...backups];
+  resultsList.replaceChildren(...picks.map(renderPick));
+  updatePicksHeading();
+  if (picks.length === 0) resultsHeading.textContent = 'Nothing to pick from tonight';
+  showPanel(results);
+  fitOverviews();
+}
+
 function showResults({ picks, backups, candidateCount, stats }) {
   captureEvent('shortlist_generated', {
     shortlist_mode: mode,
@@ -807,14 +840,211 @@ function showResults({ picks, backups, candidateCount, stats }) {
     picks_count: picks.length,
     candidate_count: candidateCount,
   });
-  resultsContext.textContent = describeTonight();
-  resultsSummary.textContent = summarizeResults({ picks, candidateCount, stats });
-  backupPicks = [...backups];
-  resultsList.replaceChildren(...picks.map(renderPick));
-  updatePicksHeading();
-  if (picks.length === 0) resultsHeading.textContent = 'Nothing to pick from tonight';
-  showPanel(results);
-  fitOverviews();
+  const moodLabel = moodOptions.querySelector('input:checked')?.closest('label')?.querySelector('strong')?.textContent;
+  currentResult = { mode, mood: lastChoices.mood, moodLabel, viewers: viewerNames(), picks, backups };
+  renderShortlist({
+    picks,
+    backups,
+    viewers: currentResult.viewers,
+    context: describeTonight(),
+    summary: summarizeResults({ picks, candidateCount, stats }),
+    fromSaved: false,
+  });
+}
+
+function formatSavedDate(iso) {
+  const date = new Date(iso);
+  const day = date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  const time = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${day} · ${time}`;
+}
+
+function describeSaved({ viewers, mood }) {
+  return [viewers.join('\u00a0&\u00a0'), mood].filter(Boolean).join('\u00a0· ');
+}
+
+// Saved shortlists
+// A starting name the person can keep or type over, like "Light and easy with Sam & Alex".
+function suggestedName({ moodLabel, viewers }) {
+  return [moodLabel, viewers.join(' & ')].filter(Boolean).join(' with ');
+}
+
+// Saving needs an account, so a signed-out click signs in first, then asks for a name.
+function startSave() {
+  if (!account) {
+    saveAfterSignIn = true;
+    openAccountDialog();
+    return;
+  }
+  saveButton.hidden = true;
+  nameForm.hidden = false;
+  nameForm.elements.name.value = suggestedName(currentResult);
+  nameForm.elements.name.focus();
+  nameForm.elements.name.select();
+}
+
+function cancelSave() {
+  nameForm.hidden = true;
+  saveButton.hidden = false;
+  saveButton.focus();
+}
+
+async function submitSave(event) {
+  event.preventDefault();
+  const submit = nameForm.querySelector('[type="submit"]');
+  submit.disabled = true;
+  const { moodLabel, ...shortlist } = currentResult;
+  try {
+    await api('/api/shortlists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...shortlist, name: nameForm.elements.name.value }),
+    });
+    nameForm.hidden = true;
+    saveButton.hidden = false;
+    saveButton.disabled = true;
+    saveButton.textContent = 'Saved';
+    captureEvent('shortlist_saved', { shortlist_mode: shortlist.mode, picks_count: shortlist.picks.length });
+    showToast('Saved to My shortlists.', { label: 'View', run: openHistory });
+  } catch (error) {
+    showToast(error.message);
+  } finally {
+    submit.disabled = false;
+  }
+}
+
+async function openSaved(id) {
+  try {
+    const saved = await api(`/api/shortlists/${id}`);
+    captureEvent('shortlist_saved_viewed', { shortlist_mode: saved.mode, picks_count: saved.picks.length });
+    hasShortlist = true;
+    showStep('shortlist');
+    renderShortlist({
+      picks: saved.picks,
+      backups: saved.backups,
+      viewers: saved.viewers,
+      context: `${formatSavedDate(saved.createdAt)}\u00a0· ${describeSaved({ viewers: saved.viewers, mood: saved.moodName })}`,
+      summary: 'A shortlist saved to your account.',
+      fromSaved: true,
+      heading: saved.name || 'Saved Shortlist',
+    });
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function listTitles(titles) {
+  const shown = titles.slice(0, 3).join(', ');
+  return titles.length > 3 ? `${shown} and ${titles.length - 3} more` : shown;
+}
+
+// An unnamed list goes by its date, so the date leads either way.
+function renderSaved(saved) {
+  const item = cloneTemplate('saved-template');
+  const date = formatSavedDate(saved.createdAt);
+  const label = saved.name || date;
+  field(item, 'name').textContent = label;
+  field(item, 'meta').textContent = [saved.name ? date : null, describeSaved(saved)].filter(Boolean).join('\u00a0· ');
+  field(item, 'titles').textContent = listTitles(saved.titles);
+  field(item, 'open').addEventListener('click', () => openSaved(saved.id));
+  field(item, 'rename').setAttribute('aria-label', `Rename ${label}`);
+  field(item, 'rename').addEventListener('click', () => startRename(saved, item));
+  field(item, 'delete').setAttribute('aria-label', `Delete ${label}`);
+  field(item, 'delete').addEventListener('click', () => deleteSaved(saved.id, item));
+  return item;
+}
+
+function showRenameForm(item, open) {
+  field(item, 'rename-form').hidden = !open;
+  field(item, 'open').hidden = open;
+  field(item, 'actions').hidden = open;
+}
+
+function startRename(saved, item) {
+  const form = field(item, 'rename-form');
+  showRenameForm(item, true);
+  field(item, 'rename-error').hidden = true;
+  form.elements.name.value = saved.name ?? '';
+  form.elements.name.focus();
+  form.elements.name.select();
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const { name } = await api(`/api/shortlists/${saved.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.elements.name.value }),
+      });
+      captureEvent('shortlist_saved_renamed', {});
+      const renamed = renderSaved({ ...saved, name });
+      item.replaceWith(renamed);
+      field(renamed, 'rename').focus();
+    } catch (error) {
+      field(item, 'rename-error').textContent = error.message;
+      field(item, 'rename-error').hidden = false;
+    }
+  };
+  field(item, 'rename-cancel').onclick = () => {
+    showRenameForm(item, false);
+    field(item, 'rename').focus();
+  };
+}
+
+function summarizeSaved() {
+  const count = [...savedList.children].filter((item) => !item.hidden).length;
+  historyStart.hidden = count > 0;
+  historySummary.textContent = count === 0
+    ? 'Shortlists you build while signed in are saved here, newest first.'
+    : `${count} saved ${count === 1 ? 'shortlist' : 'shortlists'}, newest first.`;
+}
+
+async function openHistory() {
+  await finishDelete();
+  goToStep('history');
+  historySummary.textContent = 'Loading your shortlists…';
+  savedList.replaceChildren();
+  try {
+    const { shortlists } = await api('/api/shortlists');
+    savedList.replaceChildren(...shortlists.map(renderSaved));
+    summarizeSaved();
+  } catch (error) {
+    historySummary.textContent = error.message;
+  }
+}
+
+// Deleting waits out the Undo window, like removing a person.
+async function finishDelete() {
+  if (!pendingDelete) return;
+  const { id, item, timer } = pendingDelete;
+  clearTimeout(timer);
+  pendingDelete = null;
+  hideToast();
+  try {
+    await api(`/api/shortlists/${id}`, { method: 'DELETE' });
+    captureEvent('shortlist_saved_deleted', {});
+    item.remove();
+  } catch (error) {
+    item.hidden = false;
+    summarizeSaved();
+    showToast(error.message);
+  }
+}
+
+function undoDelete() {
+  const { item, timer } = pendingDelete;
+  clearTimeout(timer);
+  pendingDelete = null;
+  item.hidden = false;
+  hideToast();
+  summarizeSaved();
+}
+
+async function deleteSaved(id, item) {
+  await finishDelete();
+  item.hidden = true;
+  summarizeSaved();
+  pendingDelete = { id, item, timer: setTimeout(finishDelete, UNDO_WINDOW_MS) };
+  showToast('Deleted a saved shortlist.', { label: 'Undo', run: undoDelete });
 }
 
 async function buildShortlist(choices) {
@@ -863,6 +1093,7 @@ function setUpNavigation() {
   // Leaving the page ends the Undo window, so the removal still has to reach the server.
   window.addEventListener('pagehide', () => {
     if (pendingRemoval) fetch(`/api/profiles/${pendingRemoval.slot}`, { method: 'DELETE', keepalive: true });
+    if (pendingDelete) fetch(`/api/shortlists/${pendingDelete.id}`, { method: 'DELETE', keepalive: true });
   });
 }
 
@@ -872,6 +1103,7 @@ function renderAccount() {
   accountEmail.hidden = !account;
   signInButton.hidden = Boolean(account);
   signOutButton.hidden = !account;
+  myShortlistsButton.hidden = !account;
   // Narrow screens hide the email, so it's still there on hover and to screen readers.
   signOutButton.title = account ? `Signed in as ${account.email}` : '';
   signOutButton.setAttribute('aria-label', account ? `Sign out of ${account.email}` : 'Sign out');
@@ -892,6 +1124,7 @@ function setAccountMode(nextMode) {
 function openAccountDialog() {
   setAccountMode('login');
   accountForm.reset();
+  accountReason.hidden = !saveAfterSignIn;
   accountDialog.showModal();
 }
 
@@ -914,6 +1147,10 @@ async function submitAccount(event) {
     accountDialog.close();
     captureEvent(isSignup ? 'account_created' : 'account_signed_in', {});
     showToast(isSignup ? `Account created for ${account.email}.` : `Signed in as ${account.email}.`);
+    if (saveAfterSignIn) {
+      saveAfterSignIn = false;
+      startSave();
+    }
   } catch (error) {
     accountError.textContent = error.message;
     accountError.hidden = false;
@@ -927,6 +1164,11 @@ async function signOut() {
     await api('/api/account/logout', { method: 'POST' });
     account = null;
     renderAccount();
+    // Saved lists belong to the account, so they leave the screen with it.
+    if (currentStep() === 'history' || !backToSaved.hidden) showStep('you');
+    saveButton.disabled = false;
+    saveButton.textContent = 'Save shortlist';
+    if (!nameForm.hidden) cancelSave();
     captureEvent('account_signed_out', {});
     showToast('Signed out.');
   } catch (error) {
@@ -935,8 +1177,20 @@ async function signOut() {
 }
 
 function setUpAccount() {
-  signInButton.addEventListener('click', openAccountDialog);
+  signInButton.addEventListener('click', () => {
+    saveAfterSignIn = false;
+    openAccountDialog();
+  });
+  saveButton.addEventListener('click', startSave);
+  nameForm.addEventListener('submit', submitSave);
+  document.getElementById('name-cancel').addEventListener('click', cancelSave);
+  // Closing the dialog without signing in drops the pending save.
+  accountDialog.addEventListener('close', () => {
+    if (!account) saveAfterSignIn = false;
+  });
   signOutButton.addEventListener('click', signOut);
+  myShortlistsButton.addEventListener('click', openHistory);
+  backToSaved.addEventListener('click', openHistory);
   accountForm.addEventListener('submit', submitAccount);
   accountSwitch.addEventListener('click', () => setAccountMode(accountMode === 'login' ? 'signup' : 'login'));
   document.getElementById('account-close').addEventListener('click', () => accountDialog.close());
