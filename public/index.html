@@ -48,6 +48,7 @@
       </nav>
       <div class="account">
         <span class="account-email" id="account-email" hidden></span>
+        <button type="button" class="quiet" id="my-shortlists" hidden>My shortlists</button>
         <button type="button" class="quiet" id="sign-in">Sign in</button>
         <button type="button" class="quiet" id="sign-out" hidden>Sign out</button>
       </div>
@@ -60,6 +61,7 @@
         <h2 class="dialog-title" id="account-title">Sign in</h2>
         <button type="button" class="quiet" id="account-close">Close</button>
       </div>
+      <p class="more account-reason" id="account-reason" hidden>Sign in or create an account to save this shortlist.</p>
       <label>
         Email
         <input type="email" name="email" maxlength="254" autocomplete="email" spellcheck="false" required autofocus />
@@ -151,9 +153,21 @@
           <h2 class="step-heading" id="results-heading" tabindex="-1"></h2>
           <p class="results-context" id="results-context"></p>
           <p class="more" id="results-summary"></p>
+          <form class="name-form" id="name-form" hidden>
+            <label>
+              Name this shortlist
+              <input type="text" name="name" maxlength="60" autocomplete="off" />
+            </label>
+            <div class="actions">
+              <button type="submit">Save</button>
+              <button type="button" class="secondary" id="name-cancel">Cancel</button>
+            </div>
+          </form>
           <div class="actions">
+            <button type="button" id="save-shortlist" hidden>Save shortlist</button>
             <button type="button" class="secondary" id="restore-picks" hidden></button>
             <button type="button" class="secondary" data-go-to="tonight">Change mood</button>
+            <button type="button" class="secondary" id="back-to-saved" hidden>My shortlists</button>
           </div>
         </div>
         <ol class="picks" id="results-list"></ol>
@@ -162,6 +176,15 @@
           via TMDB, and it may not be real-time.
           This product uses the TMDB API but is not endorsed or certified by TMDB.
         </p>
+      </div>
+    </section>
+
+    <section data-step="history" hidden>
+      <h2 class="step-heading" tabindex="-1">My shortlists</h2>
+      <p class="more" id="history-summary"></p>
+      <ol class="saved-list" id="saved-list"></ol>
+      <div class="actions">
+        <button type="button" class="secondary" id="history-start" data-go-to="you" hidden>Build a shortlist</button>
       </div>
     </section>
   </main>
@@ -279,6 +302,31 @@
         </label>
       </form>
     </section>
+  </template>
+
+  <template id="saved-template">
+    <li class="saved">
+      <button type="button" class="saved-open" data-field="open">
+        <span class="saved-name" data-field="name"></span>
+        <span class="saved-meta" data-field="meta"></span>
+        <span class="saved-titles" data-field="titles"></span>
+      </button>
+      <form class="rename-form" data-field="rename-form" hidden>
+        <label>
+          Name
+          <input type="text" name="name" maxlength="60" autocomplete="off" />
+        </label>
+        <p class="error" role="alert" data-field="rename-error" hidden></p>
+        <div class="actions">
+          <button type="submit">Save name</button>
+          <button type="button" class="secondary" data-field="rename-cancel">Cancel</button>
+        </div>
+      </form>
+      <div class="saved-actions" data-field="actions">
+        <button type="button" class="quiet" data-field="rename">Rename</button>
+        <button type="button" class="quiet" data-field="delete">Delete</button>
+      </div>
+    </li>
   </template>
 
   <template id="pick-template">

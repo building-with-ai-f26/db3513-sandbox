@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
 const multer = require('multer');
@@ -5,8 +6,19 @@ const Anthropic = require('@anthropic-ai/sdk');
 const { buildProfile, mergeDiary, summarizeProfile } = require('./letterboxd');
 const { normalizeUsername, fetchDiary } = require('./letterboxd-rss');
 const { parseNetflixHistory } = require('./netflix');
-const { loadProfiles, saveProfiles, deleteExpiredSessions, deleteExpiredAccountSessions } = require('./store');
-const { createAccountRouter } = require('./accounts');
+const {
+  loadProfiles,
+  saveProfiles,
+  deleteExpiredSessions,
+  deleteExpiredAccountSessions,
+  saveShortlist,
+  listShortlists,
+  getShortlist,
+  renameShortlist,
+  deleteShortlist,
+} = require('./store');
+const { createAccountRouter, readAccount } = require('./accounts');
+const { readSavedShortlist, readShortlistName } = require('./saved-shortlists');
 const { ensureSchema, closePool } = require('./db');
 const { withSession, SESSION_LIFETIME_MS } = require('./sessions');
 const { createTmdbClient } = require('./tmdb');
@@ -41,6 +53,10 @@ function emitPostHogLog(record) {
 }
 
 const app = express();
+
+// Tests swap these for fakes, so no test makes a paid call.
+app.locals.createTmdb = () => createTmdbClient(process.env.TMDB_API_TOKEN);
+app.locals.createClaude = () => new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // Uploads are held in memory just long enough to read them.
 const upload = multer({
@@ -102,6 +118,79 @@ const limitDailyShortlists = limitRequests(50, ONE_DAY_MS);
 const limitAccountAttempts = limitRequests(30, ONE_MINUTE_MS);
 
 app.use('/api/account', createAccountRouter({ secureCookies: IS_PUBLIC, limitAttempts: limitAccountAttempts }));
+app.use('/api/shortlists', readAccount);
+
+function requireAccount(req, res, next) {
+  if (req.user) {
+    next();
+    return;
+  }
+  res.status(401).json({ error: 'Sign in to see your saved shortlists.' });
+}
+
+function moodName(id) {
+  return MOODS.find((mood) => mood.id === id)?.name ?? '';
+}
+
+app.get('/api/shortlists', requireAccount, async (req, res) => {
+  const saved = await listShortlists(req.user.id);
+  res.json({
+    shortlists: saved.map(({ id, createdAt, details }) => ({
+      id,
+      createdAt,
+      name: details.name ?? null,
+      mood: moodName(details.mood),
+      viewers: details.viewers,
+      titles: details.picks.map((pick) => pick.title),
+    })),
+  });
+});
+
+// Saving is the person's choice, so the browser sends back the shortlist they chose to keep.
+app.post('/api/shortlists', requireAccount, express.json({ limit: '100kb' }), async (req, res) => {
+  let details;
+  try {
+    details = readSavedShortlist(req.body, MOODS.map((mood) => mood.id));
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+  const id = crypto.randomUUID();
+  await saveShortlist({ id, userId: req.user.id, details });
+  res.json({ id });
+});
+
+app.get('/api/shortlists/:id', requireAccount, async (req, res) => {
+  const saved = await getShortlist(req.user.id, req.params.id);
+  if (!saved) {
+    res.status(404).json({ error: "That shortlist isn't saved to your account." });
+    return;
+  }
+  res.json({ id: saved.id, createdAt: saved.createdAt, ...saved.details, moodName: moodName(saved.details.mood) });
+});
+
+app.patch('/api/shortlists/:id', requireAccount, express.json(), async (req, res) => {
+  let name;
+  try {
+    name = readShortlistName(req.body?.name);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+    return;
+  }
+  if (!(await renameShortlist(req.user.id, req.params.id, name))) {
+    res.status(404).json({ error: "That shortlist isn't saved to your account." });
+    return;
+  }
+  res.json({ name });
+});
+
+app.delete('/api/shortlists/:id', requireAccount, async (req, res) => {
+  if (!(await deleteShortlist(req.user.id, req.params.id))) {
+    res.status(404).json({ error: "That shortlist isn't saved to your account." });
+    return;
+  }
+  res.json({ deleted: true });
+});
 
 function missingKeysError() {
   if (!process.env.TMDB_API_TOKEN) return 'TMDB_API_TOKEN is not set in .env yet.';
@@ -302,7 +391,7 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
   profiles = await refreshDiaries(profiles);
   saveProfiles(profiles, req.sessionId);
 
-  const tmdb = createTmdbClient(process.env.TMDB_API_TOKEN);
+  const tmdb = app.locals.createTmdb();
   try {
     const { candidates, stats } = await buildCandidates({ profiles, serviceIds, region, tmdb });
     const { picks, backups } = await buildShortlist({
@@ -310,7 +399,7 @@ app.post('/api/shortlist', limitSearches, limitDailyShortlists, express.json(), 
       people: profiles.filter(Boolean),
       mood,
       model: process.env.ANTHROPIC_MODEL,
-      claude: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
+      claude: app.locals.createClaude(),
     });
     emitPostHogLog({
       severityText: 'INFO',
@@ -354,7 +443,7 @@ app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.jso
     return;
   }
 
-  const tmdb = createTmdbClient(process.env.TMDB_API_TOKEN);
+  const tmdb = app.locals.createTmdb();
   try {
     const { candidates, stats } = await buildQuizCandidates({ ...answers, tmdb });
     const { picks, backups } = await buildShortlist({
@@ -364,7 +453,7 @@ app.post('/api/quiz-shortlist', limitSearches, limitDailyShortlists, express.jso
       maxPicks: QUIZ_PICKS,
       effort: QUIZ_EFFORT,
       model: process.env.ANTHROPIC_MODEL,
-      claude: new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }),
+      claude: app.locals.createClaude(),
     });
     emitPostHogLog({
       severityText: 'INFO',

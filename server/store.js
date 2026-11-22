@@ -7,6 +7,9 @@ const PROFILES_FILE = path.join(DATA_DIR, 'profiles.json');
 const SESSIONS_DIR = path.join(DATA_DIR, 'sessions');
 const TMDB_CACHE_FILE = path.join(DATA_DIR, 'tmdb-cache.json');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
+const SHORTLISTS_FILE = path.join(DATA_DIR, 'shortlists.json');
+// Older shortlists drop off past this, so one account can't grow without limit.
+const MAX_SAVED_SHORTLISTS = 50;
 const UNIQUE_VIOLATION = '23505';
 
 function readJson(file, fallback) {
@@ -153,7 +156,103 @@ async function deleteExpiredAccountSessions(now = new Date()) {
   writeJson(ACCOUNTS_FILE, accounts);
 }
 
+// Saved shortlists. Every lookup is by owner as well as id, so nobody can read another account's lists.
+function readShortlists() {
+  return readJson(SHORTLISTS_FILE, []);
+}
+
+async function saveShortlist({ id, userId, details }) {
+  const db = getPool();
+  if (db) {
+    await db.query('INSERT INTO shortlists (id, user_id, details) VALUES ($1, $2, $3)', [id, userId, details]);
+    await db.query(
+      `DELETE FROM shortlists WHERE user_id = $1 AND id NOT IN (
+        SELECT id FROM shortlists WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2
+      )`,
+      [userId, MAX_SAVED_SHORTLISTS],
+    );
+    return;
+  }
+  const saved = readShortlists();
+  saved.push({ id, userId, createdAt: new Date().toISOString(), details });
+  const mine = saved.filter((shortlist) => shortlist.userId === userId);
+  const dropped = new Set(mine.slice(0, Math.max(0, mine.length - MAX_SAVED_SHORTLISTS)));
+  writeJson(SHORTLISTS_FILE, saved.filter((shortlist) => !dropped.has(shortlist)));
+}
+
+function shortlistRow(row) {
+  return { id: row.id, createdAt: new Date(row.created_at).toISOString(), details: row.details };
+}
+
+// Newest first.
+async function listShortlists(userId) {
+  const db = getPool();
+  if (db) {
+    const { rows } = await db.query(
+      'SELECT id, created_at, details FROM shortlists WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId],
+    );
+    return rows.map(shortlistRow);
+  }
+  return readShortlists()
+    .filter((shortlist) => shortlist.userId === userId)
+    .reverse()
+    .map(({ id, createdAt, details }) => ({ id, createdAt, details }));
+}
+
+async function getShortlist(userId, id) {
+  const db = getPool();
+  if (db) {
+    const { rows } = await db.query(
+      'SELECT id, created_at, details FROM shortlists WHERE user_id = $1 AND id = $2',
+      [userId, id],
+    );
+    return rows[0] ? shortlistRow(rows[0]) : null;
+  }
+  const found = readShortlists().find((shortlist) => shortlist.userId === userId && shortlist.id === id);
+  return found ? { id: found.id, createdAt: found.createdAt, details: found.details } : null;
+}
+
+// True when the shortlist was found and renamed.
+async function renameShortlist(userId, id, name) {
+  const db = getPool();
+  if (db) {
+    const { rowCount } = await db.query(
+      // A blank name is stored as JSON null; a bare SQL NULL would wipe the whole record.
+      `UPDATE shortlists SET details = jsonb_set(details, '{name}', COALESCE(to_jsonb($3::text), 'null'::jsonb))
+        WHERE user_id = $1 AND id = $2`,
+      [userId, id, name],
+    );
+    return rowCount > 0;
+  }
+  const saved = readShortlists();
+  const found = saved.find((shortlist) => shortlist.userId === userId && shortlist.id === id);
+  if (!found) return false;
+  found.details.name = name;
+  writeJson(SHORTLISTS_FILE, saved);
+  return true;
+}
+
+// True when something was deleted.
+async function deleteShortlist(userId, id) {
+  const db = getPool();
+  if (db) {
+    const { rowCount } = await db.query('DELETE FROM shortlists WHERE user_id = $1 AND id = $2', [userId, id]);
+    return rowCount > 0;
+  }
+  const saved = readShortlists();
+  const kept = saved.filter((shortlist) => !(shortlist.userId === userId && shortlist.id === id));
+  writeJson(SHORTLISTS_FILE, kept);
+  return kept.length < saved.length;
+}
+
 module.exports = {
+  saveShortlist,
+  listShortlists,
+  getShortlist,
+  renameShortlist,
+  deleteShortlist,
+  MAX_SAVED_SHORTLISTS,
   createUser,
   findUserByEmail,
   findUserById,
